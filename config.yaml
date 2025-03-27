@@ -1,0 +1,15 @@
+# Datasets to use for the benchmark
+datasets: ["STARmap_plus_HPC","CosMx_HFC", "Slideseq2_HPC","MERFISH_mColon"] # [, "Slideseq_kidney", "Stereoseq_axolotl"]
+
+semiSimulation:
+    FC: [1] # Fold change parameter. Is used to multiply the estimated mean in the NB sampling.
+    n_neighbors: [2,6] # amount of neighboring spots 
+
+# Ligand-receptor database to use -> comes from CellchatDB
+LR_database: ["data/LR_database.tsv"]
+
+# Number of ligand receptor pairs to inflate expression
+nLR_per_CTCTcomb: 1
+
+# Methods to use in the benchmark
+methods: ["cellphonedb"] # ,"lianaP_morans","lianaP_lee","spatialdm","mistyR"
