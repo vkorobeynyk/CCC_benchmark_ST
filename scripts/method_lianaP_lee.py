@@ -4,7 +4,8 @@ import liana as li
 import numpy as np
 import sys
 import json
-from plotnine import ggplot, geom_point, aes , ggtitle
+import yaml
+import matplotlib.pyplot as plt
 
 #############
 ### INPUT ###
@@ -22,11 +23,18 @@ cm = pd.DataFrame(cellmetadata["metadata"])
 ### OUTPUT ###
 ##############
 significant_interactions_path = snakemake.output["significant_interactions"]
+plot_neighbors_path = snakemake.output["plot_neighbors"]
 
 ##############
 ### Params ###
 ##############
-l = cellmetadata["spatialWeight_lianaPlus"]
+with open("config.yaml","r") as stream:
+  config = yaml.safe_load(stream)
+
+l_index = snakemake.params["l_index"]
+dataset = snakemake.params["dataset"]
+
+l = config["l_param"]["lianaP"][dataset][np.int64(l_index)]
 
 #adata = sc.AnnData(pd.read_csv("output/STARmap_plus_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_n_neigbors_4.tsv", sep="\t").T)
 #cellmetadata_path = "output/STARmap_plus_HPC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_4.json"
@@ -34,7 +42,33 @@ l = cellmetadata["spatialWeight_lianaPlus"]
 adata.obsm["spatial"] = np.array([cm["x"], cm["y"]]).T
 
 # build the spatial graph with a selected bandwidth
-li.ut.spatial_neighbors(adata, bandwidth=l[0], kernel='gaussian', set_diag=True)
+li.ut.spatial_neighbors(adata, bandwidth=l, kernel='gaussian', set_diag=True)
+
+#########################################
+### Plot weights according to l param ###
+
+df_neighbor_cells = pd.DataFrame(cellmetadata["neighbor_cells"])
+Cell_OI = df_neighbor_cells.columns[2]
+neighbor_cells = df_neighbor_cells.loc[:,Cell_OI]
+# index of cell_OI 
+cell_OI_index = np.where(cm["Cell_ID"] == Cell_OI)[0]
+
+index_Positive_sp_connectivities_cell_OI = np.nonzero(adata.obsp["spatial_connectivities"][:,cell_OI_index] > 0.1)[0]
+index_neighbor_cells = cm[cm["Cell_ID"].isin(list(neighbor_cells))].index
+
+# Generate pplot
+cm["spatial_connectivities"] = adata.obsp["spatial_connectivities"][:,cell_OI_index].A.flatten()
+
+plt.scatter(cm["x"], cm["y"], 
+            c=cm['spatial_connectivities'] , s = 5)
+plt.colorbar()
+plt.scatter(cm.loc[list(index_neighbor_cells),"x"], cm.loc[list(index_neighbor_cells),"y"], 
+            c= "red", s = 5)
+plt.scatter(cm.loc[cell_OI_index,"x"], cm.loc[cell_OI_index,"y"], 
+            c= "green", s = 5)
+            
+plt.savefig(plot_neighbors_path, dpi = 200) 
+
 
 # Bivariate Ligand-Receptor Relationships
 lrdata = li.mt.bivariate(adata,
