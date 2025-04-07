@@ -176,7 +176,7 @@ rule run_metric_f1score:
         significant_interactions="output/{dataset}/{method}/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}.tsv",
         simulated_interactions="output/{dataset}_semiSimulation_NB/simulated_interactions_FC_{FC}_n_neigbors_{n_neighbors}.RDS",
     output:
-        CT_statistics="output/{dataset}/metrics/{method}/f1_score_FC_{FC}_n_neigbors_{n_neighbors}_CT_statistics_l_{l_param_index}.csv",
+        CT_statistics="output/{dataset}/metrics/{method}/f1_score_FC_{FC}_n_neigbors_{n_neighbors}_CT_statistics_l_{l_param_index}.csv"
     container:
         "sing_container/liana_edgeR.sif"
     script:
