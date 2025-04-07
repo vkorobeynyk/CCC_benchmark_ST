@@ -12,4 +12,19 @@ LR_database: ["data/LR_database.tsv"]
 nLR_per_CTCTcomb: 1
 
 # Methods to use in the benchmark
-methods: ["cellphonedb"] # ,"lianaP_morans","lianaP_lee","spatialdm","mistyR"
+methods: ["lianaP_morans","lianaP_lee","spatialdm"] #"cellphonedb","mistyR"
+
+l_param_index: [0,1,2,3] # index to subset python dict -> this indicates how many different l parameteres we want to test
+
+l_param:
+  lianaP:
+    STARmap_plus_HPC: [300,450,600,750]
+    CosMx_HFC: [0.15,0.25,0.35,0.45]
+    Slideseq2_HPC: [40,55,70,85]
+    MERFISH_mColon: [20,35,50,65]
+  spatialdm:
+    STARmap_plus_HPC: [10,15,20,25]
+    CosMx_HFC: [0.01,0.015,0.02,0.025]
+    Slideseq2_HPC: [2,3,4,5]
+    MERFISH_mColon: [1,2,3,4]
+    
