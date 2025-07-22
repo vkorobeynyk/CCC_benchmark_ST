@@ -33,9 +33,10 @@ with open("config.yaml","r") as stream:
 
 l_index = snakemake.params["l_index"]
 dataset = snakemake.params["dataset"]
+LR_database_path = snakemake.params["LR_database"]
 
 l = config["l_param"]["lianaP"][dataset][np.int64(l_index)]
-#adata = sc.AnnData(pd.read_csv("output/STARmap_plus_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_n_neigbors_4.tsv", sep="\t").T)
+#adata = sc.AnnData(pd.read_csv("output/MERFISH_mColon_semiSimulation_NB/inflated_normalized_counts_FC_1_n_neigbors_2_indexLR_1.tsv", sep="\t").T)
 #cellmetadata_path = "output/STARmap_plus_HPC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_4.json"
 
 adata.obsm["spatial"] = np.array([cm["x"], cm["y"]]).T
@@ -46,31 +47,33 @@ li.ut.spatial_neighbors(adata, bandwidth=l, kernel='gaussian', set_diag=True)
 #########################################
 ### Plot weights according to l param ###
 
-df_neighbor_cells = pd.DataFrame(cellmetadata["neighbor_cells"])
-Cell_OI = df_neighbor_cells.columns[2]
-neighbor_cells = df_neighbor_cells.loc[:,Cell_OI]
-# index of cell_OI 
-cell_OI_index = np.where(cm["Cell_ID"] == Cell_OI)[0]
+all_sender_cells = cm.loc[cm["Celltype"] == "CT1",]["Cell_ID"].tolist()
+index_sender_Cells = cm.loc[cm["Celltype"] == "CT1",]["Cell_ID"].index.tolist()
+all_receiver_cells = cm.loc[cm["Celltype"] == "CT2",]["Cell_ID"].tolist()
+index_receiver_cells = cm.loc[cm["Celltype"] == "CT2",]["Cell_ID"].index.tolist()
 
-index_Positive_sp_connectivities_cell_OI = np.nonzero(adata.obsp["spatial_connectivities"][:,cell_OI_index] > 0.1)[0]
-index_neighbor_cells = cm[cm["Cell_ID"].isin(list(neighbor_cells))].index
-
-# Generate pplot
-cm["spatial_connectivities"] = adata.obsp["spatial_connectivities"][:,cell_OI_index].A.flatten()
-
+# get spatial connectivities
+cm["spatial_connectivities"] = pd.DataFrame.sparse.from_spmatrix(adata.obsp["spatial_connectivities"]).loc[index_sender_Cells,].max(axis=0)
+            
 plt.scatter(cm["x"], cm["y"], 
             c=cm['spatial_connectivities'] , s = 5)
 plt.colorbar()
-plt.scatter(cm.loc[list(index_neighbor_cells),"x"], cm.loc[list(index_neighbor_cells),"y"], 
+plt.scatter(cm.loc[cm["Cell_ID"].isin(all_sender_cells),"x"], cm.loc[cm["Cell_ID"].isin(all_sender_cells),"y"], 
             c= "red", s = 5)
-plt.scatter(cm.loc[cell_OI_index,"x"], cm.loc[cell_OI_index,"y"], 
+plt.scatter(cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"x"], cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"y"], 
             c= "green", s = 5)
+plt.xlabel("x_coord_um")
+plt.ylabel("y_coord_um")
+plt.title("red - sender cells | gree - receiver cells | yellow - cells seen by method | color bar - spatial connectivity values")
             
 plt.savefig(plot_neighbors_path, dpi = 200) 
 
+# get LR database
+LR_database = pd.read_csv(LR_database_path, sep=" ")
+
 # Bivariate Ligand-Receptor Relationships
-lrdata = li.mt.bivariate(adata,
-                      resource_name='cellchatdb', # NOTE: uses HUMAN gene symbols!
+liana = li.mt.bivariate(adata,
+                      resource=LR_database,
                       local_name='cosine', # Name of the function - currenty the other local metrics dont work/ dont change result at all
                       global_name="morans", # Name global function
                       n_perms=100, # Number of permutations to calculate a p-value
@@ -82,11 +85,11 @@ lrdata = li.mt.bivariate(adata,
                       verbose=True
 )
 
-#LRadata = out[1] # subset of adata to only LR only 
-LRdata_df = lrdata.var.sort_values("morans_pvals", ascending=True) # extract df with interactions and statistics
-
-# save data
-LRdata_df = LRdata_df.loc[LRdata_df["morans_pvals"] < 0.05 , ["ligand","receptor","morans_pvals"]]
-LRdata_df = LRdata_df.rename({"morans_pvals":"pval"},axis=1)
+# extract info and save data
+LRdata_df = liana.var
+LRdata_df = LRdata_df.loc[:  , ["ligand","receptor","morans_pvals"]]
+LRdata_df["significant"] = LRdata_df["morans_pvals"] < 0.05
+LRdata_df = LRdata_df.rename({"morans_pvals":"statistics"},axis=1)
+LRdata_df = LRdata_df.sort_values("statistics") # sort importance column on ascending order
 LRdata_df["ligand_receptor"] = LRdata_df["ligand"] + "_" + LRdata_df["receptor"]
 LRdata_df.to_csv(significant_interactions_path, sep = "\t")
