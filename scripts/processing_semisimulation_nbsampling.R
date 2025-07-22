@@ -18,7 +18,6 @@ if (is.null(snakemake@input[["processed_counts"]]) | is.null(snakemake@input[["g
 #############
 processed_counts_path = snakemake@input[["processed_counts"]]
 genemetadata_path = snakemake@input[["genemetadata"]]
-LR_database_path = snakemake@params[["LR_database"]]
 cellmetadata_path = snakemake@input[["cellmetadata"]]
 
 ##############
@@ -34,9 +33,10 @@ plot_neighbors_path = snakemake@output[["plot_neighbors"]]
 ##############
 ### PARAMS ###
 ##############
-nLR_per_CTCTcomb = snakemake@params[["nLR_per_CTCTcomb"]]
-FC = as.double(snakemake@wildcards[["FC"]])
-n_neighbors = as.integer(snakemake@wildcards[["n_neighbors"]])
+indexLR_toSample = snakemake@wildcards[["indexLR_toSample"]] %>% as.integer
+FC = snakemake@wildcards[["FC"]] %>% as.double
+n_neighbors = snakemake@wildcards[["n_neighbors"]] %>% as.integer
+LR_database_path = snakemake@params[["LR_database"]]
 
 #################
 ### Load data ###
@@ -60,11 +60,13 @@ rownames(cellmetadata$metadata) = cellmetadata$metadata$Cell_ID
 # neighbors_metadata is used to indicate cells where the signal will be added and to estimate parameters (using edgeR) for calculation of FC after semi-simulation
 # In the end of the script, I am saving the cellmetadata as the metadata that cell-cell communications methods will use
 
+
+
 '
-counts = read.table("data/processed/STARmap_plus_HPC/processed_counts_STARmap_plus_HPC.tsv")
-genemetadata = readRDS("/home/vkorob/Documents/git/CCC_benchmark_ST/data/processed/STARmap_plus_HPC/genemetadata_STARmap_plus_HPC.RDS")
+counts = read.table("data/processed/MERFISH_mColon//processed_counts_MERFISH_mColon.tsv")
+genemetadata = readRDS("/home/vkorob/Documents/git/CCC_benchmark_ST/data/processed/MERFISH_mColon/genemetadata_MERFISH_mColon.RDS")
 means_perCT = genemetadata$mean
-cellmetadata = read_json("data/processed/STARmap_plus_HPC/cellmetadata4_STARmap_plus_HPC.json")
+cellmetadata = read_json("data/processed/MERFISH_mColon/cellmetadata_MERFISH_mColon.json")
 LRdb = read.table("data/LR_database.tsv", header = T)
 '
 
@@ -106,97 +108,41 @@ if(length(gene_index) > 0) {
 # Load LRdb #
 #############
 
-# Load OmniPath database
+# Load database
 LRdb = read.table(LR_database_path, header = T)
 
-LRdb = LRdb[(LRdb$ligand %in% rownames(counts)),]
-LRdb = LRdb[(LRdb$receptor %in% rownames(counts)),]
-# filter LR because there are duplicated pairs (only 1)
-LRdb$L_R = str_c(LRdb$ligand,"_",LRdb$receptor)
-LRdb = LRdb[!duplicated(LRdb$L_R),]
-
-# filter LRdb to only contain L/R that have mean != 0
-LRdb %<>% filter(ligand %in% means_perCT$gene_names)
-LRdb %<>% filter(receptor %in% means_perCT$gene_names)
+# iterate over every row and filter genes that are not in count data and have 0 mean per CT
+n = LRdb %>%
+  apply(., 1, function(row) {
+    str_split(row,"_") %>%
+      lapply(., function(x) {(x %in% rownames(counts)) & (x %in% means_perCT$gene_names)}) %>%
+      unlist %>%
+      all
+  })
+LRdb = LRdb[n,]
 
 message(paste("After filtering LR database," , nrow(LRdb) , "LR pairs show expression in at least 10 cells"))
+
+###########################################
+# Select genes to artificially add counts #
+###########################################
+simulated_interactions_lst = list()
+
+# Pre-sample LR pairs to be used in the semi simulation
+# Also pre-sample the subunit genes
+comb_CT = "CT1_CT2"
+
+# select LR pair to inflate expression according to index indexLR_toSample
+LR_sample = LRdb[indexLR_toSample,]
+simulated_interactions_lst[[comb_CT]]$ligand = LR_sample$ligand
+simulated_interactions_lst[[comb_CT]]$receptor = LR_sample$receptor
 
 ###########################
 # Inflate gene expression #
 ###########################
-set.seed(1)
-simulated_interactions_lst = list()
-
-tmp_LRdb = LRdb
-
-# Pre-sample LR pairs to be used in the semi simulation
-# Also pre-sample the subunit genes
-# This is written in case we want to simulate multiple interactions and not only CT1_CT2
-for(comb_CT in "CT1_CT2")
-{
-  # select randomly LR pair to inflate expression
-  index_toSample = sample(seq(1,nrow(tmp_LRdb)) , size = nLR_per_CTCTcomb, replace = F)
-  LR_sample = tmp_LRdb[index_toSample,]
-  
-  # Add genes belonging to a complex to be also inflated (based on CellPhoneDB and CellChatDB DB)
-  # CellChat
-  LRdb_cellchat = select_resource(c('CellChatDB'))[[1]]
-  LRdb_cellchat = rbind(filter(LRdb_cellchat, grepl("COMPLEX", source)) , filter(LRdb_cellchat, grepl("COMPLEX", target)))
-  
-  # CellPhoneDB
-  LRdb_cpdb = select_resource(c('CellPhoneDB'))[[1]]
-  LRdb_cpdb = rbind(filter(LRdb_cpdb, grepl("COMPLEX", source)) , filter(LRdb_cpdb, grepl("COMPLEX", target)))
-  
-  LRdb_forSubunits_joined = rbind(LRdb_cellchat , LRdb_cpdb)
-  LRdb_forSubunits_joined = LRdb_forSubunits_joined[!str_c(LRdb_forSubunits_joined$source, LRdb_forSubunits_joined$target) %>% duplicated,] # remove duplicated entries
-  
-  # remove the sampled LR pairs 
-  tmp_LRdb = tmp_LRdb[-index_toSample,]
-  
-  # adding L and R to the LR_list to track inflated genes without removing duplicates
-  simulated_interactions_lst[[comb_CT]] = LR_sample$L_R
-  
-  ############## find subunits for ligands
-  for(gene in LR_sample$ligand)
-  {
-    tmp_df = filter(LRdb_forSubunits_joined , grepl(gene, source_genesymbol) & grepl("COMPLEX", source))
-    
-    # in case this gene has no subunits, skip
-    if(nrow(tmp_df) == 0) {next}
-    
-    subunits = c(tmp_df$source_genesymbol %>% str_split("_") %>% lapply("[",1) , tmp_df$source_genesymbol %>% str_split("_") %>% lapply("[",2)) %>% unlist %>% unique()
-    subunits = subunits[!grepl(gene, subunits)] # remove original gene
-    
-    # dont select subunits that are not in means_perCT (probably were filtered because estimated mean = 0 or the gene doesnt exist in the data)
-    subunits %<>% .[subunits %in% means_perCT$gene_names]
-    
-    simulated_interactions_lst[[comb_CT]]  %<>% append(. , subunits[which(subunits %in% rownames(counts))] %>% str_c(., "_subunit")) # remove empty strings and add subunit . Also here we filter subunits that are not present in count data
-  }
-  
-  ############## find subunits for receptors
-  for(gene in LR_sample$receptor)
-  {
-    tmp_df = filter(LRdb_forSubunits_joined , grepl(gene, target_genesymbol) & grepl("COMPLEX", target))
-    
-    # in case this gene has no subunits, skip
-    if(nrow(tmp_df) == 0) {next}
-    
-    subunits = c(tmp_df$target_genesymbol %>% str_split("_") %>% lapply("[",1) , tmp_df$target_genesymbol %>% str_split("_") %>% lapply("[",2)) %>% unlist %>% unique()
-    subunits = subunits[!grepl(gene, subunits)] # remove original gene
-    
-    # dont select subunits that are not in means_perCT (probably were filtered because estimated mean = 0 or the gene doesnt exist in the data)
-    subunits %<>% .[subunits %in% means_perCT$gene_names]
-    
-    simulated_interactions_lst[[comb_CT]]  %<>% append(. , subunits[which(subunits %in% rownames(counts))] %>% str_c("subunit_" , .)) # remove empty strings and add subunit . Also here we filter subunits that are not present in count data
-  }
-  
-  # remove duplicates in subunits info
-  simulated_interactions_lst[[comb_CT]] = simulated_interactions_lst[[comb_CT]][!duplicated(simulated_interactions_lst[[comb_CT]])]
-}
 
 # Semi simulation
-# It may happen that a subunit of a gene has a mean parameter that is below the 1Q threshold I use. Now I use the original means for the subunits. In theory i would have 
-# to check the parameters of every subunit and they are not in line, I would remove them
+# Subunits are also simulated because the LR database nomenclature is L_R1_R2 etc
 semi_simulation_out = semi_simulate(counts = counts, simulated_interactions_lst = simulated_interactions_lst , genemetadata = genemetadata, 
                                     metadata = neighbors_metadata , combination_CT = "CT1_CT2", FC = FC, n_neighbors = n_neighbors, df_neighbors = neighbors_info)
 
@@ -207,8 +153,8 @@ semi_simulation_out = semi_simulate(counts = counts, simulated_interactions_lst 
 # as the cells that we plan to add signal to were determined with *find_neighboring_spots* function. THere are no cells to which we didnt add signal
 
 # get simulated genes
-names_ofLgenes = str_split(simulated_interactions_lst[[1]], "_")  %>% lapply("[[",1) %>% unlist %>% setdiff(.,"subunit") %>% unique
-names_ofRgenes = str_split(simulated_interactions_lst[[1]], "_")  %>% lapply("[[",2) %>% unlist %>% setdiff(.,"subunit") %>% unique
+names_ofLgenes = simulated_interactions_lst$CT1_CT2$ligand %>% str_split(., "_")  %>% unlist
+names_ofRgenes = simulated_interactions_lst$CT1_CT2$receptor %>% str_split(., "_")   %>% unlist
 
 FC_after_semisimulation = list()
 for(CT in names(semi_simulation_out$cell_info[[1]]$cells_signalAdded))

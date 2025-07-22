@@ -13,13 +13,13 @@ semi_simulate = function(counts, simulated_interactions_lst ,genemetadata,  meta
     CT1 = tmp_var1[1]
     CT2 = tmp_var1[2]
     
-    L_sample = simulated_interactions_lst[[comb_CT]] %>% str_split("_") %>% lapply(.,"[[",1) %>% as.character %>% setdiff("subunit") # remove subunit string from the L and R vectors
-    R_sample = simulated_interactions_lst[[comb_CT]] %>% str_split("_") %>% lapply(.,"[[",2) %>% as.character %>% setdiff("subunit")
+    L_sample = simulated_interactions_lst$CT1_CT2$ligand %>% str_split("_") %>% unlist
+    R_sample = simulated_interactions_lst$CT1_CT2$receptor %>% str_split("_") %>% unlist
     
     # iterate over cell type
     for(tmp_CT in c("CTsender","CTreceiver"))  
     {
-      if (tmp_CT == "CTsender" ) { # If celltype is sender -> add signal to all cells
+      if (tmp_CT == "CTsender" ) { # If celltype is sender -> add signal to all CT1 cells
         genes_to_sample = L_sample
         CT = CT1
         cells_toAdd_signal = colnames(counts)[which(metadata$Celltype == CT)]
@@ -61,12 +61,11 @@ semi_simulate = function(counts, simulated_interactions_lst ,genemetadata,  meta
 }
 
 # Based on spatial coordinates data, this function selects neighboring cells 
-find_neighboring_spots = function(metadata , spatial_coords, n_neighbors, ligand_spots, receptor_spots, remove_spots)
+find_neighboring_spots = function(spatial_coords, n_neighbors, ligand_spots, receptor_spots, remove_spots)
 {
   # n_neighbors -> amount of neighboring spots/cells
   # ligand_spots -> spots/cells around which to select neighbors 
-  # spatial_coords -> spatial coordinates. dataframe with 1 and 2 column being the coordinates
-  # metadata -> dataframe with optional metadata
+  # spatial_coords -> spatial coordinates. dataframe with 1 and 2 column being the coordinates, rownames must be cellnames
   # remove_spots -> logical if to remove spots based on mean distance
   # CT1 -> name of celltype sender
   # CT2 -> name of celltype receiver
@@ -155,66 +154,62 @@ estimate_params_edgeR = function(counts , metadata, mm)
 
 # Generate 2 plots:
 # avelogcpm plot according to edgeR that shows how much signal we added to data
-compute_diagnostic_plots = function(counts , master_lst, FC_param, n_neighbors_param, dataset, metadata , CT_toPlot)
+compute_diagnostic_plots = function(counts , master_lst, n_neighbors_param, dataset , CT_toPlot)
 {
   plot_avelogcpm_fixed_n_neighbors = list()
   
-  # selects cells belonging to the celltype indicated by CT_toPlot
-  filtered_raw_metadata =  filter(metadata, Celltype %in% CT_toPlot) 
-  filtered_original_counts = counts[,filtered_raw_metadata$Cell_ID]
-  filtered_original_counts_aveLogCPM = aveLogCPM(filtered_original_counts)
-  
   ###############################################
-  ### Plot AveLogCPM having n_neighbors fixed ###
+  ### Plot AveLogCPM across n_neighbors param ###
   ###############################################
   for(n_neighbors in n_neighbors_param)
   {
     n = grep(paste0("^",n_neighbors,"$"), names(master_lst) %>% str_split("_") %>% lapply("[[", 5))
-    # only select those files with correct FC
-    n = intersect(n, which((names(master_lst) %>% str_split("_") %>% lapply("[[", 2)) %in% FC_param)) 
-    # Get index of file with lowest FC
-    min_FC_index = n[str_split( names(master_lst[n]),"_") %>% lapply(., "[[", 2) %>% which.min]
-    max_FC_index = n[str_split( names(master_lst)[n],"_") %>% lapply(., "[[", 2) %>% which.max]
+    # select the first. Here we are just selecting indexLR which doesnt matter for the plors
+    n = n[1]
     
     ######################## Plot change in expression magnitude
     for(x in names(master_lst[n]))
     {
-      # Select what genes to plot
-      genes_to_plot = vector()
-      for(i in CT_toPlot) {genes_to_plot = append(genes_to_plot , master_lst[[x]][[i]])}
-      genes_to_plot = genes_to_plot %>% unlist %>% unique
+      # Select what genes to label as L_R
+      LR_genes_color = c(master_lst[[x]]$CT1,master_lst[[x]]$CT2)
       
-      inflated_counts_aveLogCPM = master_lst[[x]][["inflated_counts_aveLogCPM"]]
+      # as n_neighbors changes the amount of cells that I inflated counts into, I have to comptue avelogCPM for every different n_neighbor param
+      metadata = master_lst[[x]]$simulated_cellmetadata$metadata
       
-      current_FC = str_split( x,"_") %>% lapply(., "[[", 2) %>% unlist
-      df = data.frame(x = filtered_original_counts_aveLogCPM , y = inflated_counts_aveLogCPM, is_LR =  names(inflated_counts_aveLogCPM) %in% genes_to_plot)
+      # selects cells belonging to the celltype indicated by CT_toPlot
+      filtered_raw_metadata =  filter(metadata, Celltype %in% CT_toPlot) 
+      filtered_original_counts = counts[,filtered_raw_metadata$Cell_ID]
+      filtered_original_counts_aveLogCPM = aveLogCPM(filtered_original_counts)
+      
+      inflated_counts_aveLogCPM = master_lst[[x]]$inflated_counts_aveLogCPM
+      
+      df = data.frame(x = filtered_original_counts_aveLogCPM , y = inflated_counts_aveLogCPM, is_LR =  names(inflated_counts_aveLogCPM) %in% LR_genes_color)
       plot = ggplot(df,aes(x = x , y = y , color = is_LR)) + 
         geom_point(size = 0.5) + 
         ggtitle(paste0("n_neighbors = " ,n_neighbors , " dataset = ",dataset, " CT = ",paste(CT_toPlot, collapse = " "))) +
         xlab("aveLogCPM original counts") +
-        ylab(paste("aveLogCPM FC=",current_FC)) +
+        ylab(paste("aveLogCPM")) +
         theme(plot.title = element_text(size=8) , 
               axis.text.x = element_text(size = 8) , 
               axis.text.y = element_text(size = 8))
       plot_avelogcpm_fixed_n_neighbors[[x]] = plot
     }
   }
-  
   return(list(avelogcpm_fixed_n_neighbors = plot_avelogcpm_fixed_n_neighbors))
 }
 
 # As theoretical FC that we apply in the semi-simulation actually doesnt represent the practical FC that the data will be transformed with, generate a
 # plot with real FC after semi-simulation
-plot_FCafter_semisimulation = function(vec, theoreticalFC, n_neighbors)
+plot_FCafter_semisimulation = function(vec, indexLR,theoreticalFC, n_neighbors)
 {
-  theoreticalFC = theoreticalFC %>% unname()
+  indexLR = indexLR %>% unname()
   df = data.frame(gene = names(vec), value = vec)
   median = median(df$value) %>% round(.,2)
   plot = ggplot(df, aes(x = gene , y = value) ) + 
     geom_point() +
     geom_hline(yintercept=theoreticalFC, linetype="dashed", color = "red", linewidth = 1)  + 
     geom_hline(yintercept=median, linetype="dashed", color = "blue", linewidth = 1)  + 
-    ggtitle(paste0("n_neighbors=",n_neighbors , " | theoretical FC=",theoreticalFC , " | real FC median=",median)) +
+    ggtitle(paste0("n_neighbors=",n_neighbors , " | indexLR=",indexLR , " | theoreticalFC=", theoreticalFC, " | real FC median=",median)) +
     xlab("LR index") +
     ylab("FC after simulation") +
     theme(axis.text.x=element_blank(), #remove x axis labels

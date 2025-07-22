@@ -78,8 +78,10 @@ sdm.spatialdm_global(adata, 1000, specified_ind=None, method='both', nproc=1)
 sdm.sig_pairs(adata, method='permutation', fdr=True, threshold=0.1)     
 
 LRdata_df = adata.uns['global_res'].sort_values("perm_pval", ascending=True)
-LRdata_df = LRdata_df.loc[LRdata_df["perm_pval"] < 0.05 , ["Ligand0","Receptor0","perm_pval"]]
-LRdata_df = LRdata_df.rename({"Ligand0":"ligand" , "Receptor0":"receptor", "perm_pval":"pval"},axis=1)
+LRdata_df = LRdata_df.loc[:  , ["Ligand0","Receptor0","perm_pval"]]
+LRdata_df = LRdata_df.rename({"Ligand0":"ligand" , "Receptor0":"receptor", "perm_pval":"statistics"},axis=1)
+LRdata_df = LRdata_df.sort_values("statistics") # sort importance column on ascending order
+LRdata_df["significant"] = LRdata_df["statistics"] < 0.05
 LRdata_df["ligand_receptor"] = LRdata_df["ligand"] + "_" + LRdata_df["receptor"]
 
 LRdata_df.to_csv(significant_interactions_path, sep = "\t")

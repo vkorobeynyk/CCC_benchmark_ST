@@ -39,10 +39,10 @@ cpdb_results = cpdb_statistical_analysis_method.call(
   score_interactions = True,                       # optional: whether to score interactions or not. 
   iterations = 1000,                               # denotes the number of shufflings performed in the analysis.
   threshold = 0,                                 # defines the min % of cells expressing a gene for this to be employed in the analysis.
-  threads = 5,                                     # number of threads to use in the analysis.
+  threads = 1,                                     # number of threads to use in the analysis.
   debug_seed = 42,                                 # debug randome seed. To disable >=0.
   result_precision = 3,                            # Sets the rounding for the mean values in significan_means.
-  pvalue = 0.05,                                   # P-value threshold to employ for significance.
+  pvalue = 1,                                   # P-value threshold to employ for significance.
   subsampling = False,                             # To enable subsampling the data (geometri sketching).
   subsampling_log = False,                         # (mandatory) enable subsampling log1p for non log-transformed data inputs.
   subsampling_num_pc = 100,                        # Number of componets to subsample via geometric skectching (dafault: 100).
@@ -53,7 +53,9 @@ cpdb_results = cpdb_statistical_analysis_method.call(
   output_suffix = None                             # Replaces the timestamp in the output files by a user defined string in the  (default: None).
 )
 
-df = pd.DataFrame({"ligand_receptor" : cpdb_results["pvalues"]["interacting_pair"], "pval": cpdb_results["pvalues"]["CT1|CT2"]})
-df = df[df["pval"] < 0.05]
+LRdata_df = pd.DataFrame({"ligand_receptor" : cpdb_results["pvalues"]["interacting_pair"], "pval": cpdb_results["pvalues"]["CT1|CT2"]})
+LRdata_df["significant"] = LRdata_df["pval"] < 0.05
+LRdata_df = LRdata_df.rename({"pval":"statistics"},axis=1)
+LRdata_df = LRdata_df.sort_values("statistics") # sort importance column on ascending order
 
-df.to_csv(significant_interactions_path, sep = "\t")
+LRdata_df.to_csv(significant_interactions_path, sep = "\t")

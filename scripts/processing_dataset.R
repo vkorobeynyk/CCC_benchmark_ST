@@ -46,15 +46,16 @@ counts = read.table("data/STARmap_plus_HPC/counts_STARmap_plus_HPC.tsv", row.nam
 metadata = read.table("data/STARmap_plus_HPC/metadata_STARmap_plus_HPC.tsv",row.names = 1)
 '
 
-###### Downsample datasets by 3x
+###### Downsample datasets by 2x
 set.seed(1)
 for(celltype in unique(metadata$Celltype))
 {
   index_in_metadata = which(celltype == metadata$Celltype)
-  sampled_cells = sample(index_in_metadata, size = length(index_in_metadata) * 2/3)
+  sampled_cells = sample(index_in_metadata, size = length(index_in_metadata) * 1/2)
   metadata %<>% filter(!row_number() %in% sampled_cells)
   counts %<>% select(metadata$Cell_ID)
 }
+
 
 # remove genes with 0 counts and keep genes expressed in at least 10 cells
 counts = counts[rowSums(counts) != 0 & rowSums(counts != 0) > 10,]
@@ -65,7 +66,7 @@ counts = counts[rowSums(counts) != 0 & rowSums(counts != 0) > 10,]
 #n_neighbors = 6 -> this is used to estimate mean and dispersion. As there is no perfect number for number of neighbors, we chose one that gives enough interactions 
 # that can be simulated
 
-neighbors_info = find_neighboring_spots(metadata = metadata, spatial_coords = metadata %>% select(c("x","y")), 
+neighbors_info = find_neighboring_spots(spatial_coords = metadata %>% select(c("x","y")), 
                                         n_neighbors = 6,  
                                         ligand_spots = metadata %>% filter(Celltype == "CT1") %>% select(Cell_ID) %>% unlist %>% unname, 
                                         receptor_spots = metadata %>% filter(Celltype == "CT2") %>% select(Cell_ID) %>% unlist %>% unname,
@@ -76,7 +77,7 @@ p = ggplot(neighbors_info$metadata, aes(x = x, y = y,color = Celltype, size = Ce
   geom_point() +
   xlab("x") +
   ylab("y") +  
-  scale_color_manual(values = c("#0072B2","#D55E00", "#41DE11"))+
+  scale_color_manual(values = c("#008000","orange", "black"))+
   scale_size_manual(values = c(2,2,0.75))
 
 ggsave(filename = plot_allneighbors_path, plot = p, width = 200, height = 150, units = "mm")
