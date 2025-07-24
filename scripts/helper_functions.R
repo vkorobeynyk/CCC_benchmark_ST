@@ -1,61 +1,66 @@
 # Semi-simulation framework
 # one can semi-simulate several combinations of CT-CT pairs
-semi_simulate = function(counts, simulated_interactions_lst ,genemetadata,  metadata , combination_CT, FC, n_neighbors, df_neighbors)
+semi_simulate = function(counts, simulated_interactions_lst ,N_cells_expressingR,N_cells_expressingL , genemetadata,  metadata , combination_CT, FC, df_neighbors)
 {
   n_neighbors_lst = list()
   counts_inflated = counts
   cell_info = list()
   means_perCT = genemetadata$mean
   
-  for(comb_CT in combination_CT)
+  tmp_var1 = str_split("CT1_CT2","_")[[1]]
+  CT1 = tmp_var1[1]
+  CT2 = tmp_var1[2]
+  
+  L_sample = simulated_interactions_lst$CT1_CT2$ligand %>% str_split("_") %>% unlist
+  R_sample = simulated_interactions_lst$CT1_CT2$receptor %>% str_split("_") %>% unlist
+  
+  # careful with the order of CTsender and CTreceiver
+  # as I am using same variable cells_toAdd_signal, receiver has to come after sender
+  for(tmp_CT in c("CTsender","CTreceiver"))  
   {
-    tmp_var1 = str_split(comb_CT,"_")[[1]]
-    CT1 = tmp_var1[1]
-    CT2 = tmp_var1[2]
+    # We add signal to either sender cells or receiver cells according to N_cells_expressing argument
     
-    L_sample = simulated_interactions_lst$CT1_CT2$ligand %>% str_split("_") %>% unlist
-    R_sample = simulated_interactions_lst$CT1_CT2$receptor %>% str_split("_") %>% unlist
-    
-    # iterate over cell type
-    for(tmp_CT in c("CTsender","CTreceiver"))  
-    {
-      if (tmp_CT == "CTsender" ) { # If celltype is sender -> add signal to all CT1 cells
-        genes_to_sample = L_sample
-        CT = CT1
-        cells_toAdd_signal = colnames(counts)[which(metadata$Celltype == CT)]
-      } else if (tmp_CT == "CTreceiver") {
-        genes_to_sample = R_sample
-        CT = CT2
-        cells_toAdd_signal = colnames(counts)[which(metadata$Celltype == CT)] # CT2 receiver cells that we will add signal to were already precomputed with find_neighboring_spots, so we add signal to all cells
-        }
+    if (tmp_CT == "CTsender" ) { 
+      genes_to_sample = L_sample
+      CT = CT1
+      cells_toAdd_signal = sample(colnames(df_neighbors), N_cells_expressingL)
       
-      
-      #save the inflated cells for estimating mean
-      cell_info[[comb_CT]][["cells_signalAdded"]][[CT]] = cells_toAdd_signal
-      
-      # Iterate over every gene (L/R) depending on the CT and inflate expression
-      for(gene_sample in genes_to_sample)
-      {
-        # set all the expression for this celltype to 0
-        counts_inflated[gene_sample ,cells_toAdd_signal] = 0
-        
-        gene_mean = means_perCT[grep(paste("^",gene_sample,"$", sep=""),  means_perCT$gene_names),] %>% .[CT] %>% as.numeric()
-        
-        gene_dispersion = genemetadata$disp %>% subset(gene == gene_sample) %>% select(edgeR_dispersion) %>% as.numeric
-        mu = gene_mean * FC
-        x1 = rnbinom(1000, mu = mu, size = 1/gene_dispersion) # shape parameter of the gamma mixing distribution
-        # replace the expression for the CT according to the sampled values
-        # in case there are not enough sampled values > 0 then sample from the > 0 values with replacement
-        if(length(x1[x1>0]) > length(cells_toAdd_signal)) {x1 = sample(x1[x1>0] , length(cells_toAdd_signal), replace = F)
-        } else if(all(x1 == 0)) {x1 = sample(1 , length(cells_toAdd_signal), replace = T)
-        } else {x1 = sample(x1[x1>0] , length(cells_toAdd_signal), replace = T)}
-        
-        
-        # Add the final expression to sampled zero cells
-        counts_inflated[gene_sample ,cells_toAdd_signal] = x1
+    } else if (tmp_CT == "CTreceiver") {
+      genes_to_sample = R_sample
+      CT = CT2
+      # select receiver cells rowwise so that every sender cells is surrounded by same (+-1) receiver cell
+      cells_toAdd_signal = df_neighbors[,cells_toAdd_signal] %>% 
+        t %>% 
+        as.vector %>% 
+        extract(1:N_cells_expressingR)
       }
+    
+    
+    #save the inflated cells for estimating mean
+    cell_info[["CT1_CT2"]][["cells_signalAdded"]][[CT]] = cells_toAdd_signal
+    
+    # Iterate over every gene (L/R) depending on the CT and inflate expression
+    for(gene_sample in genes_to_sample)
+    {
+      # set all the expression for this celltype to 0
+      counts_inflated[gene_sample ,cells_toAdd_signal] = 0
+      
+      gene_mean = means_perCT[grep(paste("^",gene_sample,"$", sep=""),  means_perCT$gene_names),] %>% .[CT] %>% as.numeric()
+      
+      gene_dispersion = genemetadata$disp %>% subset(gene == gene_sample) %>% select(edgeR_dispersion) %>% as.numeric
+      mu = gene_mean * FC
+      x1 = rnbinom(1000, mu = mu, size = 1/gene_dispersion) # shape parameter of the gamma mixing distribution
+      # replace the expression for the CT according to the sampled values
+      # in case there are not enough sampled values > 0 then sample from the > 0 values with replacement
+      if(length(x1[x1>0]) > length(cells_toAdd_signal)) {x1 = sample(x1[x1>0] , length(cells_toAdd_signal), replace = F)
+      } else if(all(x1 == 0)) {x1 = sample(1 , length(cells_toAdd_signal), replace = T)
+      } else {x1 = sample(x1[x1>0] , length(cells_toAdd_signal), replace = T)}
+      
+      
+      # Add the final expression to sampled zero cells
+      counts_inflated[gene_sample ,cells_toAdd_signal] = x1
     }
-  } 
+  }
   
   return(list(counts_inflated = counts_inflated , cell_info = cell_info))
 }

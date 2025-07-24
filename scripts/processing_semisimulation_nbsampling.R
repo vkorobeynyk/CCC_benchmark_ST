@@ -36,6 +36,7 @@ plot_neighbors_path = snakemake@output[["plot_neighbors"]]
 indexLR_toSample = snakemake@wildcards[["indexLR_toSample"]] %>% as.integer
 FC = snakemake@wildcards[["FC"]] %>% as.double
 n_neighbors = snakemake@wildcards[["n_neighbors"]] %>% as.integer
+FC_nCells_expressingLR = snakemake@wildcards[["FC_nCells_expressingLR"]] %>% as.double
 LR_database_path = snakemake@params[["LR_database"]]
 
 #################
@@ -70,25 +71,17 @@ cellmetadata = read_json("data/processed/MERFISH_mColon/cellmetadata_MERFISH_mCo
 LRdb = read.table("data/LR_database.tsv", header = T)
 '
 
-################################################
-# Select appropriate amount of receptor spots  #
-################################################
-#### Select neighboring cells / spots acording to n_neighbors parameter
+#######################################
+# Select n_neighbors to be simulated  #
+#######################################
+#### Select neighboring cells / spots according to n_neighbors parameter
+# This is not the final amounht of cells to which the signal will be added to
+# The final amount will be sampled from all neighbors selected above * FC_nCells_expressingLR (probability of a cell expressing Receptor)
 neighbors_info = cellmetadata$neighbor_cells[1:n_neighbors,]
 
 # Add Celltype information to metadata file
 neighbors_metadata = cellmetadata$metadata %>% mutate(Celltype = ifelse(Cell_ID %in% colnames(neighbors_info) , "CT1", "Other"))
 neighbors_metadata$Celltype[neighbors_metadata$Cell_ID %in% unlist(unname(neighbors_info)) & neighbors_metadata$Celltype != "CT1"] = "CT2"
-
-# simple plotfind_neighboring_spots
-p = ggplot(neighbors_metadata, aes(x = x, y = y,color = Celltype, size = Celltype)) +
-  geom_point() +
-  xlab("x") +
-  ylab("y")+  
-  scale_color_manual(values = c("#0072B2","#D55E00", "#41DE11")) +
-  scale_size_manual(values = c(2,2,0.75))
-
-ggsave(filename = plot_neighbors_path, plot = p, width = 200, height = 150, units = "mm")
 
 # check if cell names of counts and metadata correspond and are in the same order
 stopifnot(colnames(counts) == neighbors_metadata$Cell_ID)
@@ -118,7 +111,7 @@ n = LRdb %>%
       lapply(., function(x) {(x %in% rownames(counts)) & (x %in% means_perCT$gene_names)}) %>%
       unlist %>%
       all
-  })
+})
 LRdb = LRdb[n,]
 
 message(paste("After filtering LR database," , nrow(LRdb) , "LR pairs show expression in at least 10 cells"))
@@ -140,11 +133,35 @@ simulated_interactions_lst[[comb_CT]]$receptor = LR_sample$receptor
 ###########################
 # Inflate gene expression #
 ###########################
+# calculate the percentage of cells to which add signal to
+# For the case of senders, we keep the amount of cells to which add expression to the same through the entire benchmark
+# We change the amount of receiver cells that express receptor 
+# This is merely to decrease computational cost as adding another parameter would increase the computational time dramatically
+N_cells_expressingR = FC_nCells_expressingLR * 100 * cellmetadata$average_percentageCells_expressingLR
+N_cells_expressingL = 100 * cellmetadata$average_percentageCells_expressingLR
 
 # Semi simulation
 # Subunits are also simulated because the LR database nomenclature is L_R1_R2 etc
 semi_simulation_out = semi_simulate(counts = counts, simulated_interactions_lst = simulated_interactions_lst , genemetadata = genemetadata, 
-                                    metadata = neighbors_metadata , combination_CT = "CT1_CT2", FC = FC, n_neighbors = n_neighbors, df_neighbors = neighbors_info)
+                                    metadata = neighbors_metadata ,
+                                    N_cells_expressingR = N_cells_expressingR ,
+                                    N_cells_expressingL = N_cells_expressingL,
+                                    FC = FC,
+                                    df_neighbors = neighbors_info)
+
+# simple plot to show cells to which we added signal
+neighbors_metadata$Celltype[neighbors_metadata$Cell_ID %in% semi_simulation_out$cell_info$CT1_CT2$cells_signalAdded$CT1] = "CT1_signalAdded"
+neighbors_metadata$Celltype[neighbors_metadata$Cell_ID %in% semi_simulation_out$cell_info$CT1_CT2$cells_signalAdded$CT2] = "CT2_signalAdded"
+
+# simple plotfind_neighboring_spots
+p = ggplot(neighbors_metadata, aes(x = x, y = y,color = Celltype, size = Celltype)) +
+  geom_point() +
+  xlab("x") +
+  ylab("y")+  
+  scale_color_manual(values = c("#FFCCFF" ,"#990099" ,"#CCCCFF" ,"#0000FF" ,"#FFCC99")) +
+  scale_size_manual(values = c(1.5,3,1.5,3,0.5))
+
+ggsave(filename = plot_neighbors_path, plot = p, width = 200, height = 150, units = "mm")
 
 #################################
 # calculate FC after simulation #

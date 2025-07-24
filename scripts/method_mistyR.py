@@ -65,10 +65,10 @@ misty(bypass_intra=True, model=LinearModel, verbose=True)
 #########################################
 ### Plot weights according to l param ###
 
-all_sender_cells = cm.loc[cm["Celltype"] == "CT1",]["Cell_ID"].tolist()
-index_sender_Cells = cm.loc[cm["Celltype"] == "CT1",]["Cell_ID"].index.tolist()
-all_receiver_cells = cm.loc[cm["Celltype"] == "CT2",]["Cell_ID"].tolist()
-index_receiver_cells = cm.loc[cm["Celltype"] == "CT2",]["Cell_ID"].index.tolist()
+all_sender_cells = cm.loc[cm["Celltype"] == "CT1_signalAdded",]["Cell_ID"].tolist()
+index_sender_Cells = cm.loc[cm["Celltype"] == "CT1_signalAdded",]["Cell_ID"].index.tolist()
+all_receiver_cells = cm.loc[cm["Celltype"] == "CT2_signalAdded",]["Cell_ID"].tolist()
+index_receiver_cells = cm.loc[cm["Celltype"] == "CT2_signalAdded",]["Cell_ID"].index.tolist()
 
 # get spatial connectivities compputd by misty for all sender cells
 cm["spatial_connectivities"] = pd.DataFrame.sparse.from_spmatrix(misty["extra"].obsp["spatial_connectivities"]).loc[index_sender_Cells,].max(axis=0)
@@ -82,7 +82,8 @@ plt.scatter(cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"x"], cm.loc[cm["Cell_
             c= "green", s = 5)
 plt.xlabel("x_coord_um")
 plt.ylabel("y_coord_um")
-plt.title("red - sender cells | gree - receiver cells | yellow - cells seen by method | color bar - spatial connectivity values")
+plt.title("red - sender cells | gree - receiver cells | yellow - cells seen by method | color bar - spatial connectivity values",
+          fontsize = 10)
             
 plt.savefig(plot_neighbors_path, dpi = 200) 
 

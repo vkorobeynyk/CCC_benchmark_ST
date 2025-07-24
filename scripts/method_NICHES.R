@@ -76,9 +76,11 @@ distance_mat <- apply(coord, 1, function(pt)
 )
 
 # generate a list where each index name is sender cell and it contains all cells within the radius seen by the method
-all_sender_cells = colnames(cellmetadata$neighbor_cells)
-all_receiver_cells = unlist(cellmetadata$neighbor_cells)
-vec = map(all_sender_cells, function(cell_OI) {
+CT1 = colnames(cellmetadata$neighbor_cells)
+CT2 = unlist(cellmetadata$neighbor_cells)
+CT1_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype == "CT1_signalAdded"]
+CT2_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype == "CT2_signalAdded"]
+vec = map(CT1, function(cell_OI) {
   simulated_neighbors = cellmetadata$neighbor_cells[,cell_OI]
   
   within_radius = distance_mat[,grep(cell_OI, colnames(distance_mat))] < radius
@@ -91,11 +93,11 @@ all_cells_seen_byMethod = vec[rowSums(vec)>0,] %>% rownames
 
 # plot
 plt = ggplot(coord, aes(x = x ,y = y)) + 
-  geom_point(size = 0.5) +
+  geom_point(size = 0.1) +
   geom_point(data=coord[all_cells_seen_byMethod,] , aes(x=x, y=y), colour="orange", size=2) +
-  geom_point(data=coord[all_receiver_cells,] , aes(x=x, y=y), colour="#008000", size=2) +
-  geom_point(data=coord[all_sender_cells,] , aes(x=x, y=y), colour="blue", size=2) +
-  ggtitle("NICHES euclidean radius filtering | orange -> cells within radius | blue -> sender cells | green -> receiver cells")+
+  geom_point(data=coord[CT1_signalAdded,] , aes(x=x, y=y), colour="#990099", size=3) +
+  geom_point(data=coord[CT2_signalAdded,] , aes(x=x, y=y), colour="#0000FF", size=3) +
+  ggtitle("NICHES euclidean radius filtering | black -> cells within radius | purple -> CT1_signalAdded | blue -> CT2_signalAdded")+
   theme(axis.ticks.y=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.x=element_blank(),
