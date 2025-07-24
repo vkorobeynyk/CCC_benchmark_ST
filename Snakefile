@@ -6,10 +6,10 @@ rule all:
     input:
         run_processing=expand("data/processed/{dataset}/processed_counts_{dataset}.tsv" , 
             dataset=config["datasets"]),
-        run_semiSimulation_inflateCounts=expand("output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv", FC=config["semiSimulation"]["FC"], n_neighbors=config["semiSimulation"]["n_neighbors"], dataset=config["datasets"], indexLR_toSample=config["indexLR_toSample"]),
-        run_normalization=expand("output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv" ,FC=config["semiSimulation"]["FC"], n_neighbors=config["semiSimulation"]["n_neighbors"], dataset=config["datasets"], indexLR_toSample=config["indexLR_toSample"]),
-        run_methods=expand("output/{dataset}/{method}/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv" ,FC=config["semiSimulation"]["FC"], n_neighbors=config["semiSimulation"]["n_neighbors"], dataset=config["datasets"], method=config["methods"], l_param_index=config["l_param_index"], indexLR_toSample=config["indexLR_toSample"]),
-        run_metrics=expand("output/{dataset}/metrics/{method}/f1_score_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.csv",FC=config["semiSimulation"]["FC"], n_neighbors=config["semiSimulation"]["n_neighbors"], dataset=config["datasets"], method=config["methods"], l_param_index=config["l_param_index"], indexLR_toSample=config["indexLR_toSample"])
+        run_semiSimulation_inflateCounts=expand("output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv", FC=config["semiSimulation"]["FC"], n_neighbors=config["semiSimulation"]["n_neighbors"], FC_nCells_expressingLR=config["semiSimulation"]["FC_nCells_expressingLR"],dataset=config["datasets"], indexLR_toSample=config["indexLR_toSample"]),
+        run_normalization=expand("output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv" ,FC=config["semiSimulation"]["FC"], n_neighbors=config["semiSimulation"]["n_neighbors"],FC_nCells_expressingLR=config["semiSimulation"]["FC_nCells_expressingLR"], dataset=config["datasets"], indexLR_toSample=config["indexLR_toSample"]),
+        run_methods=expand("output/{dataset}/{method}/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv" ,FC=config["semiSimulation"]["FC"], n_neighbors=config["semiSimulation"]["n_neighbors"],FC_nCells_expressingLR=config["semiSimulation"]["FC_nCells_expressingLR"], dataset=config["datasets"], method=config["methods"], l_param_index=config["l_param_index"], indexLR_toSample=config["indexLR_toSample"]),
+        run_metrics=expand("output/{dataset}/metrics/{method}/f1_score_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.csv",FC=config["semiSimulation"]["FC"], n_neighbors=config["semiSimulation"]["n_neighbors"], FC_nCells_expressingLR=config["semiSimulation"]["FC_nCells_expressingLR"],dataset=config["datasets"], method=config["methods"], l_param_index=config["l_param_index"], indexLR_toSample=config["indexLR_toSample"])
     output:
         visualization=directory("output/results")
     shell:
@@ -30,6 +30,9 @@ rule run_processing:
         cellmetadata="data/processed/{dataset}/cellmetadata_{dataset}.json",
         plot_allneighbors="data/processed/{dataset}/plot_allneighbors_{dataset}.pdf",
         diagnostic_plots="data/processed/{dataset}/diagnostic_plots_{dataset}.pdf"
+    params:
+      LR_database=config["LR_database"],
+      n_neighbors=config["semiSimulation"]["n_neighbors"]
     container:
         "sing_container/liana_edgeR.sif"
     script:
@@ -45,12 +48,12 @@ rule run_semiSimulation_inflateCounts:
         genemetadata="data/processed/{dataset}/genemetadata_{dataset}.RDS",
         cellmetadata="data/processed/{dataset}/cellmetadata_{dataset}.json"
     output:
-        inflated_counts="output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
-        simulated_cellmetadata="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.json",
-        simulated_interactions="output/{dataset}_semiSimulation_NB/simulated_interactions_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.RDS",
-        FC_after_simulation="output/{dataset}_semiSimulation_NB/realFC_aftersimulation_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.RDS",
-        metadata_cpdbv5="data/cpdbv5_extrafiles/{dataset}/metadata_cpdbv5_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
-        plot_neighbors="data/processed/{dataset}/plot_neighbors_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.pdf"
+        inflated_counts="output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
+        simulated_cellmetadata="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.json",
+        simulated_interactions="output/{dataset}_semiSimulation_NB/simulated_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.RDS",
+        FC_after_simulation="output/{dataset}_semiSimulation_NB/realFC_aftersimulation_{FC}_n_neigbors_{n_neighbors}_indexLR_FC_nCells_expressingLR_{FC_nCells_expressingLR}_{indexLR_toSample}.RDS",
+        metadata_cpdbv5="data/cpdbv5_extrafiles/{dataset}/metadata_cpdbv5_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
+        plot_neighbors="data/processed/{dataset}/plot_selected_neighbors_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.pdf"
     params:
         indexLR_toSample=config["indexLR_toSample"],
     	LR_database=config["LR_database"]
@@ -66,9 +69,9 @@ rule run_normalization:
     resources:
         mem_mb=5000
     input:
-        inflated_counts="output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv"
+        inflated_counts="output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv"
     output:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv"
+        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv"
     container:
         "sing_container/liana_edgeR.sif"
     script:
@@ -81,12 +84,12 @@ rule run_method_cellphonedb:
     resources:
         mem_mb=5000
     input:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
+        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
         microenvironment="data/cpdbv5_extrafiles/microenvironment.tsv",
-        metadata="data/cpdbv5_extrafiles/{dataset}/metadata_cpdbv5_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
+        metadata="data/cpdbv5_extrafiles/{dataset}/metadata_cpdbv5_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
         cpdb_database="data/cpdbv5_extrafiles/cellphonedb.zip",
     output:
-        significant_interactions="output/{dataset}/cellphonedb/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv"
+        significant_interactions="output/{dataset}/cellphonedb/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv"
     container:
         "sing_container/cellphonedbv5.sif"
     script:
@@ -97,11 +100,11 @@ rule run_method_lianaP_morans:
     resources:
         mem_mb=5000
     input:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
-        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.json"
+        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
+        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.json"
     output:
-        significant_interactions="output/{dataset}/lianaP_morans/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        plot_neighbors="output/{dataset}/lianaP_morans/plot_neighbors_lianaP_morans_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
+        significant_interactions="output/{dataset}/lianaP_morans/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
+        plot_neighbors="output/{dataset}/lianaP_morans/plot_selected_neighbors_lianaP_morans_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
     container:
         "sing_container/lianaPlus.sif"
     params:
@@ -116,11 +119,11 @@ rule run_method_lianaP_lee:
     resources:
         mem_mb=5000
     input:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
-        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.json"
+        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
+        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.json"
     output:
-        significant_interactions="output/{dataset}/lianaP_lee/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        plot_neighbors="output/{dataset}/lianaP_lee/plot_neighbors_lianaP_lee_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
+        significant_interactions="output/{dataset}/lianaP_lee/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
+        plot_neighbors="output/{dataset}/lianaP_lee/plot_selected_neighbors_lianaP_lee_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
     container:
         "sing_container/lianaPlus.sif"
     params:
@@ -135,11 +138,11 @@ rule run_method_spatialdm:
     resources:
         mem_mb=5000
     input:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
-        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.json"
+        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
+        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.json"
     output:
-        significant_interactions="output/{dataset}/spatialdm/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        plot_neighbors="output/{dataset}/spatialdm/plot_neighbors_spatialdm_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
+        significant_interactions="output/{dataset}/spatialdm/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
+        plot_neighbors="output/{dataset}/spatialdm/plot_selected_neighbors_spatialdm_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
     container:
         "sing_container/spatialdm.sif"
     params:
@@ -155,11 +158,11 @@ rule run_method_mistyR:
     resources:
         mem_mb=5000
     input:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
-        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.json"
+        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
+        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.json"
     output:
-        significant_interactions="output/{dataset}/mistyR/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        plot_neighbors="output/{dataset}/mistyR/plot_neighbors_mistyR_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
+        significant_interactions="output/{dataset}/mistyR/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
+        plot_neighbors="output/{dataset}/mistyR/plot_selected_neighbors_mistyR_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
     container:
         "sing_container/lianaPlus.sif"
     params:
@@ -174,11 +177,11 @@ rule run_method_NICHES:
     resources:
         mem_mb=5000
     input:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
-        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.json"
+        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
+        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.json"
     output:
-        significant_interactions="output/{dataset}/NICHES/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        plot_neighbors="output/{dataset}/NICHES/plot_neighbors_NICHES_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
+        significant_interactions="output/{dataset}/NICHES/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
+        plot_neighbors="output/{dataset}/NICHES/plot_selected_neighbors_NICHES_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
     container:
         "sing_container/NICHES.sif"
     params:
@@ -193,11 +196,11 @@ rule run_method_cellchat:
     resources:
         mem_mb=5000
     input:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.tsv",
-        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.json"
+        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.tsv",
+        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.json"
     output:
-        significant_interactions="output/{dataset}/cellchat/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        plot_neighbors="output/{dataset}/cellchat/plot_neighbors_cellchat_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
+        significant_interactions="output/{dataset}/cellchat/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
+        plot_neighbors="output/{dataset}/cellchat/plot_selected_neighbors_cellchat_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
     container:
         "sing_container/cellchat.sif"
     params:
@@ -213,11 +216,11 @@ rule run_metric_f1score_rankingLRgenes:
     resources:
         mem_mb=1000
     input:
-        significant_interactions="output/{dataset}/{method}/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        simulated_interactions="output/{dataset}_semiSimulation_NB/simulated_interactions_FC_{FC}_n_neigbors_{n_neighbors}_indexLR_{indexLR_toSample}.RDS"
+        significant_interactions="output/{dataset}/{method}/significant_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
+        simulated_interactions="output/{dataset}_semiSimulation_NB/simulated_interactions_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_indexLR_{indexLR_toSample}.RDS"
     output:
-    	ranking_LRgenes="output/{dataset}/metrics/{method}/ranking_LRgenes_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        CT_statistics="output/{dataset}/metrics/{method}/f1_score_FC_{FC}_n_neigbors_{n_neighbors}_l_{l_param_index}_indexLR_{indexLR_toSample}.csv"
+    	ranking_LRgenes="output/{dataset}/metrics/{method}/ranking_LRgenes_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
+        CT_statistics="output/{dataset}/metrics/{method}/f1_score_FC_{FC}_n_neigbors_{n_neighbors}_FC_nCells_expressingLR_{FC_nCells_expressingLR}_l_{l_param_index}_indexLR_{indexLR_toSample}.csv"
     container:
         "sing_container/liana_edgeR.sif"
     script:
