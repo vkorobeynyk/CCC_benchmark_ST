@@ -7,7 +7,7 @@ library(ggplot2)
 library(dplyr)
 library(stringr)
 library(CellChat)
-library(rjson)
+library(jsonlite)
 library(magrittr)
 library(purrr)
 source("scripts/helper_functions.R")
@@ -29,9 +29,9 @@ plot_neighbors_path = snakemake@output[["plot_neighbors"]]
 ##############
 config = yaml::read_yaml("config.yaml")
 
-radius_index = as.integer(snakemake@params["radius_index"]) +1
+l_index = as.integer(snakemake@params["l_index"]) +1
 dataset = snakemake@params["dataset"] %>% as.character
-radius = config[["l_param"]][["CellChat"]][[dataset]][radius_index] %>% unlist
+radius = config[["l_param"]][["CellChat"]][[dataset]][l_index] %>% unlist
 
 LR_database_path = snakemake@params[["LR_database"]]
 LR_database = read.table(LR_database_path, row.names = 1)
@@ -41,11 +41,11 @@ LR_database = read.table(LR_database_path, row.names = 1)
 #############
 
 inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
-cellmetadata = fromJSON(file = cellmetadata_path)
+cellmetadata = read_json(path = cellmetadata_path)
 
 '
 inflated_counts = read.csv("output/Slideseq2_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_n_neigbors_1_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = fromJSON(file = "output/Slideseq2_HPC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_1_indexLR_1.json")
+cellmetadata = read_json(path = "output/Slideseq2_HPC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_1_indexLR_1.json")
 '
 
 # transform json list to individual dataframe
@@ -69,8 +69,8 @@ distance_mat = apply(coord, 1, function(pt)
 # generate a list where each index name is sender cell and it contains all cells within the radius seen by the method
 CT1 = colnames(cellmetadata$neighbor_cells)
 CT2 = unlist(cellmetadata$neighbor_cells)
-CT1_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype == "CT1_signalAdded"]
-CT2_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype == "CT2_signalAdded"]
+CT1_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype_updated == "CT1_signalAdded"]
+CT2_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype_updated == "CT2_signalAdded"]
 vec = map(CT1, function(cell_OI) {
   simulated_neighbors = cellmetadata$neighbor_cells[,cell_OI]
   
@@ -103,6 +103,7 @@ ggsave(plot_neighbors_path, plt, device = "png", width = 30, height = 25, units 
 # Ratio is a conversion rate from pixels to micrometers. As all our data is in micrometers, ratio = 1.
 # Tol is a factor that is important if one compares center-to-center distance against "interaction range" parameter because tol is usually half of cell/spot size
 # as the goal is just for methods to use same distance in space, tol is not important. It is set to 1
+# all datasets were rescaled to micrometers
 spatial.factors = data.frame(ratio = 1, tol = 1)
 
 # Create a CellChat object
@@ -119,7 +120,7 @@ CellChatDB = CellChatDB.human
 ### Modify database of CellChat according to LR_database.tsv ###
 ################################################################
 # Here I am filtering CellchatDB according to LR_database.tsv file
-# To understand how CellchatDB I looked at the example (from LR_database.tsv) of:
+# To understand how CellchatDB works, I looked at the example (from LR_database.tsv) of:
 # ligand (L) -> NODAL
 # receptor (R) -> ACVR1B_ACVR2B_CFC1
 # Cellchatdb contains information of subunits and cofactors. When a receptor has multiple subunits, the nomenclature in CellChatDB is R1_R2_R3, just the same as in LR_database.tsv file
@@ -162,7 +163,8 @@ Re: nboot  (https://github.com/sqjin/CellChat/issues/244)
 I think the results will not change too much. If nboot = 100, then thresh = 0.05 means there are five permuations having larger 
 communication probabilities. If nboot = 20, then thresh = 0.05 means there are one permutation having larger communication pprobabilities.
 '
-cellchat = computeCommunProb(cellchat, type = "truncatedMean", trim = 0.01,
+# trim = 0.001 -> 0.1% of cells have to express the gene
+cellchat = computeCommunProb(cellchat, type = "truncatedMean", trim = 0.001,
                               distance.use = TRUE, interaction.range = radius, scale.distance = 1, 
                               contact.dependent = FALSE,contact.range = NULL, nboot = 100)
 

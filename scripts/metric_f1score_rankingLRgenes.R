@@ -1,6 +1,5 @@
 # Load package
 library(dplyr)
-library(jsonlite)
 library(stringr)
 library(magrittr)
 
@@ -57,7 +56,9 @@ lst_score_perCTCT = list()
 
 # compute statistics -> This is suitable for cases only we are inflating 1 ligand receptor pair
 TP = if(length(n) != 0) {1} else {0}
-FP = if(length(n) != 0) {nrow(significant_interactions)-1} else {nrow(significant_interactions)}
+FP = if(length(n) != 0) {
+  if(nrow(significant_interactions) != 0) {nrow(significant_interactions)-1} else {nrow(significant_interactions)} # case when there are no significant interactions
+} else {0}
 FN = if(length(n) != 0) {0} else {1}
 
 if(TP == 0) {precision = 0 ; recall = 0} else {precision = TP / (TP + FP) ; recall = TP / (TP + FN)}

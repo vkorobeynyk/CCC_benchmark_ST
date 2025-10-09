@@ -13,7 +13,7 @@ library(ggplot2)
 library(dplyr)
 library(stringr)
 library(NICHES)
-library(rjson)
+library(jsonlite)
 library(magrittr)
 library(purrr)
 source("scripts/helper_functions.R")
@@ -35,9 +35,9 @@ plot_neighbors_path = snakemake@output[["plot_neighbors"]]
 ##############
 config = yaml::read_yaml("config.yaml")
 
-radius_index = (as.integer(snakemake@params["radius_index"]) +1)
+l_index = (as.integer(snakemake@params["l_index"]) +1)
 dataset = snakemake@params["dataset"] %>% as.character
-radius = config[["l_param"]][["NICHES"]][[dataset]][radius_index] %>% unlist
+radius = config[["l_param"]][["NICHES"]][[dataset]][l_index] %>% unlist
 
 LR_database_path = snakemake@params[["LR_database"]]
 LR_database = read.table(LR_database_path, row.names = 1)
@@ -46,11 +46,11 @@ LR_database = read.table(LR_database_path, row.names = 1)
 #############
 
 inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
-cellmetadata = fromJSON(file = cellmetadata_path)
+cellmetadata = read_json(path = cellmetadata_path)
 
 '
 inflated_counts = read.csv("output/CosMx_HFC_semiSimulation_NB/inflated_normalized_counts_FC_1_n_neigbors_2_indexLR_26.tsv",sep="\t") %>% as.matrix
-cellmetadata = fromJSON(file = "output/CosMx_HFC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_2_indexLR_26.json")
+cellmetadata = read_json(path = "output/CosMx_HFC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_2_indexLR_26.json")
 '
 
 # transform json list to individual dataframe
@@ -78,11 +78,9 @@ distance_mat <- apply(coord, 1, function(pt)
 # generate a list where each index name is sender cell and it contains all cells within the radius seen by the method
 CT1 = colnames(cellmetadata$neighbor_cells)
 CT2 = unlist(cellmetadata$neighbor_cells)
-CT1_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype == "CT1_signalAdded"]
-CT2_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype == "CT2_signalAdded"]
+CT1_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype_updated == "CT1_signalAdded"]
+CT2_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype_updated == "CT2_signalAdded"]
 vec = map(CT1, function(cell_OI) {
-  simulated_neighbors = cellmetadata$neighbor_cells[,cell_OI]
-  
   within_radius = distance_mat[,grep(cell_OI, colnames(distance_mat))] < radius
   return(within_radius)
   
@@ -97,7 +95,7 @@ plt = ggplot(coord, aes(x = x ,y = y)) +
   geom_point(data=coord[all_cells_seen_byMethod,] , aes(x=x, y=y), colour="orange", size=2) +
   geom_point(data=coord[CT1_signalAdded,] , aes(x=x, y=y), colour="#990099", size=3) +
   geom_point(data=coord[CT2_signalAdded,] , aes(x=x, y=y), colour="#0000FF", size=3) +
-  ggtitle("NICHES euclidean radius filtering | black -> cells within radius | purple -> CT1_signalAdded | blue -> CT2_signalAdded")+
+  ggtitle("NICHES euclidean radius filtering orange -> cells seen by method | purple -> CT1_signalAdded | blue -> CT2_signalAdded")+
   theme(axis.ticks.y=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.x=element_blank(),
@@ -134,7 +132,7 @@ niche_CtN = NICHES_output[['CellToNeighborhood']]
 # Find cell-cell communication between CT1 and neighborhood comparing to CT2-Neighborhood and Other-Neighborhood
 markers_CtN = FindAllMarkers(niche_CtN,min.pct = 0,test.use = "wilcox") %>% filter(cluster == "CT1")
 
-markers_CtN %<>% mutate(ligand_receptor = gsub("—","_",rownames(markers_CtN)),
+markers_CtN %<>% mutate(ligand_receptor = gsub("—","_",gene),
                         significant = markers_CtN$p_val < 0.05,
                         statistics = p_val) %>% 
   arrange(p_val)

@@ -65,10 +65,11 @@ misty(bypass_intra=True, model=LinearModel, verbose=True)
 #########################################
 ### Plot weights according to l param ###
 
-all_sender_cells = cm.loc[cm["Celltype"] == "CT1_signalAdded",]["Cell_ID"].tolist()
-index_sender_Cells = cm.loc[cm["Celltype"] == "CT1_signalAdded",]["Cell_ID"].index.tolist()
-all_receiver_cells = cm.loc[cm["Celltype"] == "CT2_signalAdded",]["Cell_ID"].tolist()
-index_receiver_cells = cm.loc[cm["Celltype"] == "CT2_signalAdded",]["Cell_ID"].index.tolist()
+
+all_sender_cells = cm.loc[cm["Celltype_updated"] == "CT1_signalAdded",]["Cell_ID"].tolist()
+index_sender_Cells = cm.loc[cm["Celltype_updated"] == "CT1_signalAdded",]["Cell_ID"].index.tolist()
+all_receiver_cells = cm.loc[cm["Celltype_updated"] == "CT2_signalAdded",]["Cell_ID"].tolist()
+index_receiver_cells = cm.loc[cm["Celltype_updated"] == "CT2_signalAdded",]["Cell_ID"].index.tolist()
 
 # get spatial connectivities compputd by misty for all sender cells
 cm["spatial_connectivities"] = pd.DataFrame.sparse.from_spmatrix(misty["extra"].obsp["spatial_connectivities"]).loc[index_sender_Cells,].max(axis=0)
@@ -77,13 +78,13 @@ plt.scatter(cm["x"], cm["y"],
             c=cm['spatial_connectivities'] , s = 5)
 plt.colorbar()
 plt.scatter(cm.loc[cm["Cell_ID"].isin(all_sender_cells),"x"], cm.loc[cm["Cell_ID"].isin(all_sender_cells),"y"], 
-            c= "red", s = 5)
+            c= "#990099", s = 5)
 plt.scatter(cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"x"], cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"y"], 
-            c= "green", s = 5)
+            c= "#0000FF", s = 5)
 plt.xlabel("x_coord_um")
 plt.ylabel("y_coord_um")
-plt.title("red - sender cells | gree - receiver cells | yellow - cells seen by method | color bar - spatial connectivity values",
-          fontsize = 10)
+plt.title("purple - sender cells | blue - receiver cells | orange - cells seen by method | color bar - spatial connectivity values",
+          fontsize = 2)
             
 plt.savefig(plot_neighbors_path, dpi = 200) 
 

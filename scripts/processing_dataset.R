@@ -35,7 +35,7 @@ diagnostic_plots_path = snakemake@output[["diagnostic_plots"]]
 ##############
 LR_database_path = snakemake@params[["LR_database"]]
 LR_database = read.table(LR_database_path, row.names = 1)
-n_neighbors = snakemake@params[["n_neighbors"]] %>% as.integer
+max_N_neighbors = snakemake@params[["max_N_neighbors"]] %>% as.integer
 
 ###### Load data
 counts = read.table(counts_path, row.names = 1)
@@ -58,7 +58,7 @@ set.seed(1)
 for(celltype in unique(metadata$Celltype))
 {
   index_in_metadata = which(celltype == metadata$Celltype)
-  sampled_cells = sample(index_in_metadata, size = length(index_in_metadata) * 1/2)
+  sampled_cells = sample(index_in_metadata, size = length(index_in_metadata) * 0.75) # remove 75% of sample
   metadata %<>% filter(!row_number() %in% sampled_cells)
   counts %<>% select(metadata$Cell_ID)
 }
@@ -88,7 +88,7 @@ average_percentageCells_expressingLR = apply(counts[which(rownames(counts) %in% 
 #### Select sender and neighboring receiver cells  ###
 ######################################################
 neighbors_info = find_neighboring_spots(spatial_coords = metadata %>% select(c("x","y")), 
-                                        n_neighbors = max(n_neighbors),  
+                                        max_N_neighbors = max_N_neighbors,  
                                         ligand_spots = metadata %>% filter(Celltype == "CT1") %>% select(Cell_ID) %>% unlist %>% unname, 
                                         receptor_spots = metadata %>% filter(Celltype == "CT2") %>% select(Cell_ID) %>% unlist %>% unname,
                                         remove_spots = TRUE)

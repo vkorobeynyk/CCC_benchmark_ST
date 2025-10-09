@@ -14,15 +14,9 @@ cpdb_database_path = snakemake.input["cpdb_database"]
 ##############
 significant_interactions_path = snakemake.output["significant_interactions"]
 
-#### Cellphonedb requires a file as input to the cpdb_statistical_analysis_method.
-# I manually modified metadata file using the code below
-#metadata= readRDS("data/processed/Visium_HPC_SJ/cellmetadata_Visium_HPC_SJ.RDS")$metadata
-#colnames(metadata) = c("cell_type","barcode_sample")
-#rownames(metadata) = metadata$barcode_sample
-#write.table(metadata, "data/cpdbv5_extrafiles/metadata_for_cpdbv5.tsv" , sep = "\t")
-
-#### Cellphonedb requires a file as input to the cpdb_statistical_analysis_method.
-# I manually crated microenvironment file using the code below
+# Cellphonedb requires a file as input to the cpdb_statistical_analysis_method.
+# The file is generated in the script "processing_semisimulation_nbsampling.R"
+# Also, I manually crated microenvironment file using the code below
 #d = {"cell_type":["CT1","CT2"] , "microenvironment": ["env1","env1"]}
 #microenvironment = pd.DataFrame(d)
 #microenvironment.to_csv("data/Visium_HPC_SJ/microenvironment.tsv", sep = "\t", index = False)
