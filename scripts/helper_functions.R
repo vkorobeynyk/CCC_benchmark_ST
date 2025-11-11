@@ -1,6 +1,6 @@
 # Semi-simulation framework
 # one can semi-simulate several combinations of CT-CT pairs
-semi_simulate = function(counts, simulated_interactions_lst ,N_cells_expressingR,N_cells_expressingL , genemetadata,  metadata , FC, df_neighbors)
+semi_simulate = function(counts, simulated_interactions_lst ,fraction_cells_expressingR,fraction_cells_expressingL , genemetadata,  metadata , FC, df_neighbors)
 {
   counts_inflated = counts
   cell_info = list()
@@ -22,22 +22,49 @@ semi_simulate = function(counts, simulated_interactions_lst ,N_cells_expressingR
     if (tmp_CT == "CTsender" ) { 
       genes_to_sample = L_sample
       CT = CT1
-      cells_toAdd_signal = sample(colnames(df_neighbors), N_cells_expressingL)
+      N_cells_fromFraction = (length(colnames(df_neighbors)) * fraction_cells_expressingL) %>% floor
+      cells_toAdd_signal = sample(colnames(df_neighbors), N_cells_fromFraction)
       
     } else if (tmp_CT == "CTreceiver") {
       genes_to_sample = R_sample
       CT = CT2
-      # select receiver cells rowwise so that every sender cells is surrounded by same (+-1) receiver cell
-      cells_toAdd_signal = df_neighbors[,cells_toAdd_signal] %>% 
-        t %>% 
-        as.vector %>% 
-        extract(1:N_cells_expressingR) %>%
-        unique # sender cells are always unique but sometimes, if sender cells are close in space, they can share the same receiver
+      
+      # sample receiver cells according to ratio of fraction_cells_expressingL / fraction_cells_expressingR
+      if(fraction_cells_expressingR/fraction_cells_expressingL == 1)
+      {
+        cells_toAdd_signal = df_neighbors[,cells_toAdd_signal] %>% unlist %>% unname
+      } else if(fraction_cells_expressingR/fraction_cells_expressingL > 1) # in this case we have more Receiver cells than senders
+      {
+        n = (N_cells_fromFraction * fraction_cells_expressingR/fraction_cells_expressingL) %>% floor
+        
+        # select the real neighbors
+        cells_toAdd_signal_realNeighbors = df_neighbors[,cells_toAdd_signal] %>% 
+          na.omit %>%
+          t %>% 
+          as.data.frame %>% 
+          sample_n(N_cells_fromFraction)
+        # select cells which are not neighbors
+        cells_toAdd_signal_nonrealNeighbors = df_neighbors[,which(!colnames(df_neighbors) %in% cells_toAdd_signal)]  %>% 
+          na.omit %>%
+          t %>% 
+          as.data.frame %>% 
+          sample_n(n-N_cells_fromFraction)
+        
+        cells_toAdd_signal = rbind(cells_toAdd_signal_realNeighbors, cells_toAdd_signal_nonrealNeighbors) %>% unlist %>% unname
+      } else if(fraction_cells_expressingR/fraction_cells_expressingL < 1) # Sender cells more than receiver
+      {
+        cells_toAdd_signal = df_neighbors[,cells_toAdd_signal] %>% 
+          na.omit %>%
+          t %>% 
+          as.data.frame %>% 
+          sample_n((N_cells_fromFraction * fraction_cells_expressingR/fraction_cells_expressingL) %>% floor) %>% 
+          unlist %>% unname
       }
+    }
     
     #save the inflated cells for estimating mean
     cell_info[["CT1_CT2"]][["cells_signalAdded"]][[CT]] = cells_toAdd_signal
-  
+    
     # Iterate over every gene (L/R) depending on the CT and inflate expression
     for(gene_sample in genes_to_sample)
     {
@@ -84,51 +111,51 @@ find_neighboring_spots = function(spatial_coords, max_N_neighbors, ligand_spots,
   rownames(dm) = rownames(spatial_coords)
   
   # select columns belonging to only ligand spots
+  # ligand_spots and receptor_spots have no common entries
   dm = dm[,ligand_spots] %>% as.data.frame
   dm = dm[receptor_spots,] %>% as.data.frame
   
-  # select neighbor spots
-  neighbors = apply(dm, 2, function(x, cell_names = rownames(dm)) {
-    n = x %>% order %>% extract(2:(max_N_neighbors+1))
-    n = cell_names[n]
-  }) %>% as.data.frame %>% as.list
-  
-  # get distance between ligand spot and all neighboring receptor spots
-  neighbors_dist = apply(dm, 2, function(x, cell_names = rownames(dm)) {
-    n = x %>% sort %>% extract(2:(max_N_neighbors+1))
-  }) %>% as.data.frame %>% as.list
+  # Select receptors that are closest to a ligand
+  # get distance between ligand spot and neighboring receptor spot
+  neighbors = vector(length = ncol(dm))
+  neighbors_dist = vector(length = ncol(dm))
+  receiver_cell_names = rownames(dm)
+  for(index in seq_along(1:ncol(dm)))
+  {
+    c = receiver_cell_names[dm[,index] %>% order %>% extract(1:max_N_neighbors)]
+    dist = dm[,index] %>% sort %>% extract(1:max_N_neighbors)
+    
+    # Make sure that different ligands dont "see" the same receptor
+    n = 1
+    while(c %in% neighbors)
+    {
+      c = receiver_cell_names[dm[,index] %>% order %>% extract(n)]
+      dist = dm[,index] %>% sort %>% extract(n)
+      n = n+1
+      if(n > 5000) {message("while loop in fnc find_neighboring_spots taking too long") ; break}
+    }
+    neighbors[index] = c
+    neighbors_dist[index] = dist
+  }
+  neighbors = as.list(neighbors)
+  names(neighbors) = colnames(dm) # set names to ligand
+  names(neighbors_dist) = colnames(dm) # set names to ligand
   
   ####################################################################
   ### Remove Receiver cells that are "far" away from Sender cells  ###
   if(remove_spots)
   {
     min_dist = neighbors_dist %>% unlist %>% mean()
-    for(ligand in ligand_spots)
-    {
-      # remove receiver cells that are above minimum distance
-      x = neighbors_dist[[ligand]] < min_dist
-      neighbors_dist[[ligand]] = neighbors_dist[[ligand]][x]
-      neighbors[[ligand]] = neighbors[[ligand]][x]
-      
-      # as we want to have max_N_neighbors receiver cells around sender, we need to make sure that our receiver cells are not senders.
-      # here remove those receiver cells that are actually also senders
-      x = !neighbors[[ligand]] %in% ligand_spots
-      neighbors[[ligand]] = neighbors[[ligand]][x]
-      neighbors_dist[[ligand]] = neighbors_dist[[ligand]][x]
-      
-      # if sender has less neighbors than max_N_neighbors, remove
-      if(length(neighbors_dist[[ligand]]) < max_N_neighbors)
-      {
-        neighbors_dist[[ligand]] = NULL
-        neighbors[[ligand]] = NULL
-        ligand_spots = ligand_spots %>% setdiff(ligand)
-      }
-    }
+    neighbors_dist = neighbors_dist[neighbors_dist < min_dist]
+    neighbors = neighbors[names(neighbors) %in% names(neighbors_dist)]
+    
+    ligand_spots = names(neighbors)
+    receiver_spots = unlist(neighbors)
   }
   
   # Add Celltype information to metadata file
   metadata %<>% mutate(Celltype = ifelse(Cell_ID %in% ligand_spots , "CT1", "Other"))
-  metadata$Celltype[metadata$Cell_ID %in% unlist(unname(neighbors)) & metadata$Celltype != "CT1"] = "CT2"
+  metadata$Celltype[which(metadata$Cell_ID %in% receiver_spots)] = "CT2"
   
   return(list(metadata = metadata, neighbors = neighbors %>% as.data.frame))
 }
@@ -137,8 +164,8 @@ find_neighboring_spots = function(spatial_coords, max_N_neighbors, ligand_spots,
 estimate_params_edgeR = function(counts , metadata, mm)
 {
   dge = DGEList(counts = counts, samples = metadata)
-
-    # Estimate disp
+  
+  # Estimate disp
   dge = estimateDisp(dge , design = mm)
   dge = edgeR::calcNormFactors(dge)
   
@@ -146,7 +173,7 @@ estimate_params_edgeR = function(counts , metadata, mm)
   #centered.off = edgeR::getOffset(dge)  
   #centered.off = centered.off - mean(centered.off) 
   logmeans = edgeR::mglmOneWay(dge$counts, offset = 0, design = mm,
-                                dispersion = dge$tagwise.dispersion) 
+                               dispersion = dge$tagwise.dispersion) 
   
   means_perCT = exp(logmeans$coefficients) %>% as.data.frame()
   colnames(means_perCT) = colnames(mm)
@@ -225,20 +252,20 @@ plot_FCafter_semisimulation = function(vec, indexLR,theoreticalFC, max_N_neighbo
 # converts json list to dataframes
 # iterates over every index in list and converts it to df
 # when the list only contains 1 integer, converts to vector
-# 
 convert_json_to_df = function(json_lst) 
 {
-  x = lapply(json_lst, function(x) 
+  out = lapply(names(json_lst), function(name) 
   {
-    x1 = lapply(x, unlist) %>% do.call(rbind.data.frame, .)
-    if(length(x1) == 1) {x1 = x1 %>% unlist %>% unname}
-    colnames(x1) = x[[1]] %>% names
-    
-    if(any(colnames(x1) %in% c("x","y"))) 
-    {
-      x1 = x1 %>% mutate(across(c(x,y), as.double))
-    }
-    return(x1)
-  })
-  return(x)
+    lst = json_lst[name]
+    # If second index of list is non existant, its a vector
+    if(name == "metadata") { 
+      x = lst[[1]] %>% do.call(rbind.data.frame, .)
+      rownames(x) = x$Cell_ID
+      x = x %>% dplyr::mutate(across(c(x,y), as.numeric))
+    } else if(name == "neighbor_cells") {x = lst$neighbor_cells %>% as.list %>% do.call(cbind.data.frame,.)
+    } else if(name == "average_percentageCells_expressingLR") {x = lst %>% unlist}
+    return(x)
+  }) %>% setNames(., names(json_lst))
+  return(out)
 }
+

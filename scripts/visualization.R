@@ -1,22 +1,24 @@
-# Load package
-library(dplyr)
-library(optparse)
-library(ggplot2)
-library(ggpubr)
-library(stringr)
-library(ggrepel)
-library(reshape2)
-library(purrr)
-library(magrittr)
-library(plyr)
-library(scales)
-library(edgeR)
-library(jsonlite)
-library(SpatialExperiment)
-library(ComplexHeatmap)
-library(ggspavis)
-library(fmsb)
-source("scripts/helper_functions.R")
+suppressMessages({
+  # Load package
+  library(dplyr)
+  library(optparse)
+  library(ggplot2)
+  library(ggpubr)
+  library(stringr)
+  library(ggrepel)
+  library(reshape2)
+  library(purrr)
+  library(magrittr)
+  library(plyr)
+  library(scales)
+  library(edgeR)
+  library(jsonlite)
+  library(SpatialExperiment)
+  library(ComplexHeatmap)
+  library(ggspavis)
+  library(fmsb)
+  source("scripts/helper_functions.R")
+})
 
 # Get list with command line arguments by name
 option_list = list(
@@ -229,7 +231,7 @@ for(dataset in datasets)
     
     for(file in metrics_files)
     {
-      master_lst_precision_recall[["metrics"]][[file]] = read.csv((file.path(path_output_dir,dataset,"metrics/",method,file))) %>% unlist
+      master_lst_precision_recall[["metrics"]][[file]] = read.table((file.path(path_output_dir,dataset,"metrics/",method,file)), header = TRUE)
     }
     
     # NAs here mean that the LR gene that we inflated is not present in the output of the method
@@ -333,9 +335,8 @@ for(dataset in datasets)
   
   ##########################################
   ##### Generate Precision recall plot #####
-  
   tmp_df = statistics_results_lst_recallprecision_plot[[dataset]] %>%
-    mutate(ratio_ReceiverSender = FC_nReceiverCells/FC_nSenderCells) %>% 
+    mutate(ratio_ReceiverSender = (FC_nReceiverCells/FC_nSenderCells) %>% log2) %>% 
     group_by(ratio_ReceiverSender,method ) %>%
     summarise_at(vars(precision,recall), mean)
   
@@ -344,7 +345,7 @@ for(dataset in datasets)
     geom_point(size = 3) + 
     facet_grid(~ratio_ReceiverSender) +
     geom_line() + 
-    ggtitle(paste0("ratio_ReceiverSender: FC_nReceiverCells/FC_nSenderCells"))+
+    ggtitle(paste0("ratio_ReceiverSender: log2(FC_nReceiverCells/FC_nSenderCells) | Averaged across l and when FC_nReceiverCells==FC_nSenderCells"))+
     scale_x_continuous(labels = scales::number_format(accuracy = 0.01)) +
     scale_y_continuous(labels = scales::number_format(accuracy = 0.01)) 
   
@@ -369,14 +370,15 @@ for(dataset in datasets)
     ylab("Index of l parameter")
   
   d = tmp_df  %>%
-    mutate(ratio_ReceiverSender = FC_nReceiverCells/FC_nSenderCells) %>% 
+    mutate(ratio_ReceiverSender = (FC_nReceiverCells/FC_nSenderCells) %>% log2) %>% 
     group_by(ratio_ReceiverSender,method ) %>%
     summarise_at(vars(f1score), mean)
   
   p1 = ggplot(d, aes(x = ratio_ReceiverSender, y = f1score, color = method)) + 
     geom_point() +
     geom_line() +
-    ggtitle("f1 score of every method when increasing of Receiver cells")
+    ggtitle("f1 score of every method when increasing of Receiver cells | Averaged across l and when FC_nReceiverCells==FC_nSenderCells ") +
+    xlab("ratio_ReceiverSender (log2 scale - negative -> more Senders)")
   
   ##########################################
   ##### Generate ranking LR genes plot #####
@@ -403,7 +405,7 @@ for(dataset in datasets)
     ylab("FC_nReceiverCells") +
     facet_grid(~l) +
     geom_jitter(width = 0.2, height = 0.2) +
-    ggtitle("rank of inflated LR pair in the methods output faceted by l index | for some params, methods didnt find the LR interaction") +
+    ggtitle("rank of retrieved LR pairs | for some params/methods no significant were found") +
     scale_size_continuous(name = "log10(rank)")
   
   tmp_df2 = tmp_df %>%
@@ -482,10 +484,10 @@ for(dataset in datasets)
   legend(x=1.5, y=0.75, legend = rownames(df[c(-1,-2),]), bty = "n", pch = 20,text.col = "black", 
          col=fill_colors,cex=1.25, pt.cex=4, text.width = 0.1)
   
-  text(x = c(0.2,0.4,0.6,0.8,1), y = c(-0.025), labels = c(1,2,3,4,5), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.2,-0.4,-0.6,-0.8,-1), y = c(-0.025), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.05), y = c(-0.2,-0.4,-0.6,-0.8,-1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.05), y = c(0.2,0.4,0.6,0.8,1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
+  text(x = c(0.2,0.4,0.6,0.8,1), y = c(-0.05), labels = c(1,2,3,4,5), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
+  text(x = c(-0.2,-0.4,-0.6,-0.8,-1), y = c(-0.05), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
+  text(x = c(-0.1), y = c(-0.2,-0.4,-0.6,-0.8,-1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
+  text(x = c(-0.1), y = c(0.2,0.4,0.6,0.8,1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
   
   ###################################################################
   ##### summary spider charts across all parameter combinations #####
@@ -549,4 +551,5 @@ for(dataset in datasets)
   text(x = c(-0.05), y = c(-0.2,-0.4,-0.6,-0.8,-1), labels = c(1,2,3,4,5), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
   text(x = c(-0.05), y = c(0.2,0.4,0.6,0.8,1), labels = c(1,2,3,4,5), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
   dev.off()
+  
 }

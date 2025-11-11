@@ -6,16 +6,17 @@ At niche level (CelltoNeighboorhood) -> NICHES builds matrix of rows (L-R pair) 
 One can do analysis like at single cell level and perform differential expression analysis to find what communication patterns Celltype1
 sends that other celltypes do not send.
 '
-
-# Load package
-library(Seurat)
-library(ggplot2)
-library(dplyr)
-library(stringr)
-library(NICHES)
-library(jsonlite)
-library(magrittr)
-library(purrr)
+suppressMessages({
+  # Load package
+  library(Seurat)
+  library(ggplot2)
+  library(dplyr)
+  library(stringr)
+  library(NICHES)
+  library(jsonlite)
+  library(magrittr)
+  library(purrr)
+})
 source("scripts/helper_functions.R")
 
 # An useful error if the argument is missing
@@ -49,8 +50,8 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/CosMx_HFC_semiSimulation_NB/inflated_normalized_counts_FC_1_n_neigbors_2_indexLR_26.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/CosMx_HFC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_2_indexLR_26.json")
+inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_7_FC_nReceiverCells_0.5_indexLR_1.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB//simulated_cellmetadata_FC_1_FC_nSenderCells_7_FC_nReceiverCells_0.5_indexLR_1.json")
 '
 
 # transform json list to individual dataframe
@@ -74,20 +75,19 @@ coord = cellmetadata$metadata %>%
 distance_mat <- apply(coord, 1, function(pt)
   (sqrt(abs(pt["x"] - coord$x)^2 + abs(pt["y"] - coord$y)^2))
 )
-
+rownames(distance_mat) = colnames(distance_mat)
 # generate a list where each index name is sender cell and it contains all cells within the radius seen by the method
 CT1 = colnames(cellmetadata$neighbor_cells)
-CT2 = unlist(cellmetadata$neighbor_cells)
+CT2 = unlist(cellmetadata$neighbor_cells)[1]
 CT1_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype_updated == "CT1_signalAdded"]
 CT2_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype_updated == "CT2_signalAdded"]
 vec = map(CT1, function(cell_OI) {
-  within_radius = distance_mat[,grep(cell_OI, colnames(distance_mat))] < radius
-  return(within_radius)
+  within_radius = distance_mat[,which(cell_OI == colnames(distance_mat))] < radius
+  return(which(within_radius))
   
-}) %>% as.data.frame()
+}) %>% as.list
 
-rownames(vec) = colnames(distance_mat)
-all_cells_seen_byMethod = vec[rowSums(vec)>0,] %>% rownames
+all_cells_seen_byMethod = lapply(vec, names) %>% unlist
 
 # plot
 plt = ggplot(coord, aes(x = x ,y = y)) + 
@@ -130,11 +130,11 @@ niche_CtN = NICHES_output[['CellToNeighborhood']]
 
 # CellToNeighborhood analysis (here we have signal averaging over k neighbors)
 # Find cell-cell communication between CT1 and neighborhood comparing to CT2-Neighborhood and Other-Neighborhood
-markers_CtN = FindAllMarkers(niche_CtN,min.pct = 0,test.use = "wilcox") %>% filter(cluster == "CT1")
+markers_CtN = FindAllMarkers(niche_CtN, test.use = "wilcox") %>% filter(cluster == "CT1")
 
 markers_CtN %<>% mutate(ligand_receptor = gsub("—","_",gene),
-                        significant = markers_CtN$p_val < 0.05,
-                        statistics = p_val) %>% 
-  arrange(p_val)
+                        significant = markers_CtN$p_val_adj < 0.05,
+                        statistics = p_val_adj) %>% 
+  arrange(p_val_adj)
 # save data
 write.table(markers_CtN ,significant_interactions_path)

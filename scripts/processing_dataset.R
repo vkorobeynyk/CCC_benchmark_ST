@@ -1,14 +1,16 @@
-library(dplyr)
-library(magrittr)
-library(edgeR)
-library(sf)
-library(stringr)
-library(ggspavis)
-library(scater)
-library(SingleCellExperiment)
-library(jsonlite)
-source("scripts/helper_functions.R")
-source("scripts/general_spatial_QCpipeline_R_function.R")
+suppressMessages({
+  library(dplyr)
+  library(magrittr)
+  library(edgeR)
+  library(sf)
+  library(stringr)
+  library(ggspavis)
+  library(scater)
+  library(SingleCellExperiment)
+  library(jsonlite)
+  source("scripts/helper_functions.R")
+  source("scripts/general_spatial_QCpipeline_R_function.R")
+})
 
 # An useful error if the argument is missing
 if (is.null(snakemake@input[["counts"]]) | is.null(snakemake@input[["metadata"]])){
@@ -49,8 +51,8 @@ x[-1]
 dev.off()
 
 '
-counts = read.table("data/STARmap_plus_HPC/counts_STARmap_plus_HPC.tsv", row.names = 1)
-metadata = read.table("data/STARmap_plus_HPC/metadata_STARmap_plus_HPC.tsv",row.names = 1)
+counts = read.table("data/Visium_HD_HPC/counts_Visium_HD_HPC.tsv", row.names = 1)
+metadata = read.table("data/Visium_HD_HPC/metadata_Visium_HD_HPC.tsv",row.names = 1)
 '
 
 ###### Downsample datasets 2x
@@ -93,8 +95,14 @@ neighbors_info = find_neighboring_spots(spatial_coords = metadata %>% select(c("
                                         receptor_spots = metadata %>% filter(Celltype == "CT2") %>% select(Cell_ID) %>% unlist %>% unname,
                                         remove_spots = TRUE)
 
+# Update metadata according to find_neighboring_spots function
+# This is to change Celltype annotation of some cells that were not select as for example being far away
+# This is important as we want to report percentage of cells express specific gene and thus the model has to see CT1/CT2 cells accordingly
+metadata = neighbors_info$metadata
+neighbor_cells = neighbors_info$neighbors
+
 # simple plot
-p = ggplot(neighbors_info$metadata, aes(x = x, y = y,color = Celltype, size = Celltype)) +
+p = ggplot(metadata, aes(x = x, y = y,color = Celltype, size = Celltype)) +
   geom_point() +
   xlab("x") +
   ylab("y") +  
@@ -120,5 +128,5 @@ genemetadata = list( disp = data.frame(gene = rownames(estimated_params$dge) , e
 write.table(counts, processed_counts_path , sep = "\t")
 saveRDS(genemetadata, genemetadata_path)
 rownames(metadata) = NULL # remove rownames otherwise json file creates extra column
-write_json(list(metadata = metadata, neighbor_cells = neighbors_info$neighbors, 
+write_json(list(metadata = metadata, neighbor_cells = neighbor_cells, 
                 average_percentageCells_expressingLR = round(average_percentageCells_expressingLR,2)), cellmetadata_path)

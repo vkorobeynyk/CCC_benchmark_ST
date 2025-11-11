@@ -65,7 +65,7 @@ plt.scatter(cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"x"], cm.loc[cm["Cell_
 plt.xlabel("x_coord_um")
 plt.ylabel("y_coord_um")
 plt.title("purple - sender cells | blue - receiver cells | orange - cells seen by method | color bar - spatial connectivity values",
-          fontsize = 2)
+          fontsize = 8)
             
 plt.savefig(plot_neighbors_path, dpi = 200) 
 
@@ -88,6 +88,7 @@ liana = li.mt.bivariate(adata,
 
 # extract info and save data
 LRdata_df = liana.var
+LRdata_df = LRdata_df[LRdata_df["morans"] > 0] # select only positive morans values as this means co-occurence
 LRdata_df = LRdata_df.loc[:  , ["ligand","receptor","morans_pvals"]]
 LRdata_df["significant"] = LRdata_df["morans_pvals"] < 0.05
 LRdata_df = LRdata_df.rename({"morans_pvals":"statistics"},axis=1)

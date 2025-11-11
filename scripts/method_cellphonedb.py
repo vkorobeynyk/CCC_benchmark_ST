@@ -7,7 +7,7 @@ import pandas as pd
 #############
 normalized_counts_path = snakemake.input["normalized_counts"]
 microenvironment_path = snakemake.input["microenvironment"]
-metadata_path = snakemake.input["metadata"]
+cellmetadata_path = snakemake.input["cellmetadata_post_simulation"]
 cpdb_database_path = snakemake.input["cpdb_database"]
 ##############
 ### OUTPUT ###
@@ -25,7 +25,7 @@ out_path = 'results_cpdbv5_ToDelete/method1'
 
 cpdb_results = cpdb_statistical_analysis_method.call(
   cpdb_file_path = cpdb_database_path,                 # mandatory: CellphoneDB database zip file.
-  meta_file_path = metadata_path,                 # mandatory: tsv file defining barcodes to cell label.
+  meta_file_path = cellmetadata_path,                 # mandatory: tsv file defining barcodes to cell label.
   counts_file_path =  normalized_counts_path,             # mandatory: normalized count matrix - a path to the counts file, or an in-memory AnnData object
   counts_data = 'hgnc_symbol',                     # defines the gene annotation in counts matrix.
   active_tfs_file_path = None,           # optional: defines cell types and their active TFs.

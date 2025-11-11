@@ -1,11 +1,13 @@
-library(dplyr)
-library(stringr)
-library(magrittr)
-library(edgeR)
-library(ggpubr)
-library(sf)
-library(jsonlite)
-source("scripts/helper_functions.R")
+suppressMessages({
+  library(dplyr)
+  library(stringr)
+  library(magrittr)
+  library(edgeR)
+  library(ggpubr)
+  library(sf)
+  library(jsonlite)
+  source("scripts/helper_functions.R")
+})
 
 # An useful error if the argument is missing
 if (is.null(snakemake@input[["processed_counts"]]) | is.null(snakemake@input[["genemetadata"]]) | is.null(snakemake@params[["LR_database"]]) | 
@@ -47,6 +49,14 @@ genemetadata = readRDS(genemetadata_path)
 means_perCT = genemetadata$mean
 cellmetadata = read_json(path = cellmetadata_path)
 
+'
+counts = read.table("data/processed/Visium_HD_HPC/processed_counts_Visium_HD_HPC.tsv")
+genemetadata = readRDS("data/processed/Visium_HD_HPC/genemetadata_Visium_HD_HPC.RDS")
+means_perCT = genemetadata$mean
+cellmetadata = read_json("data/processed/Visium_HD_HPC/cellmetadata_Visium_HD_HPC.json")
+LRdb = read.table("data/LR_database.tsv", header = T)
+'
+
 # transform json list to individual dataframe
 cellmetadata = convert_json_to_df(cellmetadata)
 rownames(cellmetadata$metadata) = cellmetadata$metadata$Cell_ID
@@ -54,36 +64,11 @@ rownames(cellmetadata$metadata) = cellmetadata$metadata$Cell_ID
 ######################
 ### Important info ###
 ######################
-# there might be confusion with metadata
 # cellmetadata contains all celltypes and all cells
-# neighbors_metadata is the output of find_neighboring_spots and contains all spots (CT1 and CT2) whose counts will be inflated
-# neighbors_metadata is used to indicate cells where the signal will be added and to estimate parameters (using edgeR) for calculation of FC after semi-simulation
 # In the end of the script, I am saving the cellmetadata as the metadata that cell-cell communications methods will use
 
-
-
-'
-counts = read.table("data/processed/  ")
-genemetadata = readRDS("data/processed/Visium_HD_HPC/genemetadata_Visium_HD_HPC.RDS")
-means_perCT = genemetadata$mean
-cellmetadata = fromJSON("data/processed/Visium_HD_HPC/cellmetadata_Visium_HD_HPC.json")
-LRdb = read.table("data/LR_database.tsv", header = T)
-'
-
-#######################################
-# Select max_N_neighbors to be simulated  #
-#######################################
-#### Select neighboring cells / spots according to max_N_neighbors parameter
-# This is not the final amounht of cells to which the signal will be added to
-# The final amount will be sampled from all neighbors selected above * FC_nCells_expressingLR (probability of a cell expressing Receptor)
-df_neighbors = cellmetadata$neighbor_cells[1:max_N_neighbors,]
-
-# Add Celltype information to metadata file
-neighbors_metadata = cellmetadata$metadata %>% mutate(Celltype = ifelse(Cell_ID %in% colnames(df_neighbors) , "CT1", "Other"))
-neighbors_metadata$Celltype[neighbors_metadata$Cell_ID %in% unlist(unname(df_neighbors)) & neighbors_metadata$Celltype != "CT1"] = "CT2"
-
 # check if cell names of counts and metadata correspond and are in the same order
-stopifnot(colnames(counts) == neighbors_metadata$Cell_ID)
+stopifnot(colnames(counts) == cellmetadata$metadata$Cell_ID)
 
 message(paste("Shape of counts object:" , str_flatten(dim(counts) , " ")))
 
@@ -133,28 +118,26 @@ simulated_interactions_lst[[comb_CT]]$receptor = LR_sample$receptor
 # Inflate gene expression #
 ###########################
 # calculate the percentage of cells to which add signal to
-# For the case of senders, we keep the amount of cells to which add expression to the same through the entire benchmark
-# We change the amount of receiver cells that express receptor 
-# This is merely to decrease computational cost as adding another parameter would increase the computational time dramatically
-N_cells_expressingR = FC_nReceiverCells * 100 * cellmetadata$average_percentageCells_expressingLR
-N_cells_expressingL = FC_nSenderCells * 100 * cellmetadata$average_percentageCells_expressingLR
+# We change the amount of receiver/sender cells that express receptor 
+fraction_cells_expressingR = FC_nReceiverCells * cellmetadata$average_percentageCells_expressingLR
+fraction_cells_expressingL = FC_nSenderCells * cellmetadata$average_percentageCells_expressingLR
 
 # Semi simulation
 # Subunits are also simulated because the LR database nomenclature is L_R1_R2 etc
 semi_simulation_out = semi_simulate(counts = counts, simulated_interactions_lst = simulated_interactions_lst , genemetadata = genemetadata, 
-                                    metadata = neighbors_metadata ,
-                                    N_cells_expressingR = N_cells_expressingR ,
-                                    N_cells_expressingL = N_cells_expressingL,
+                                    metadata = cellmetadata$metadata ,
+                                    fraction_cells_expressingR = fraction_cells_expressingR ,
+                                    fraction_cells_expressingL = fraction_cells_expressingL,
                                     FC = FC,
-                                    df_neighbors = df_neighbors)
+                                    df_neighbors = cellmetadata$neighbor_cells)
 
 # simple plot to show cells to which we added signal
-neighbors_metadata$Celltype_updated = neighbors_metadata$Celltype
-neighbors_metadata$Celltype_updated[neighbors_metadata$Cell_ID %in% semi_simulation_out$cell_info$CT1_CT2$cells_signalAdded$CT1] = "CT1_signalAdded"
-neighbors_metadata$Celltype_updated[neighbors_metadata$Cell_ID %in% semi_simulation_out$cell_info$CT1_CT2$cells_signalAdded$CT2] = "CT2_signalAdded"
+cellmetadata$metadata$Celltype_updated = cellmetadata$metadata$Celltype
+cellmetadata$metadata$Celltype_updated[cellmetadata$metadata$Cell_ID %in% semi_simulation_out$cell_info$CT1_CT2$cells_signalAdded$CT1] = "CT1_signalAdded"
+cellmetadata$metadata$Celltype_updated[cellmetadata$metadata$Cell_ID %in% semi_simulation_out$cell_info$CT1_CT2$cells_signalAdded$CT2] = "CT2_signalAdded"
 
 # simple plotfind_neighboring_spots
-p = ggplot(neighbors_metadata, aes(x = x, y = y,color = Celltype_updated, size = Celltype_updated)) +
+p = ggplot(cellmetadata$metadata, aes(x = x, y = y,color = Celltype_updated, size = Celltype_updated)) +
   geom_point() +
   xlab("x") +
   ylab("y")+  
@@ -172,8 +155,7 @@ saveRDS(simulated_interactions_lst,simulated_interactions_path)
 
 # replace metadata and neighbors information with newly computed neighbors according to *find_neighboring_spots* function
 # as those cells expression were modified
-cellmetadata$metadata = neighbors_metadata
-cellmetadata$neighbor_cells = df_neighbors
+cellmetadata$neighbor_cells = cellmetadata$neighbor_cells
 write_json(cellmetadata, simulated_cellmetadata_path)
 #write_json(list(cellmetadata$metadata, neighbor_cells = cellmetadata$neighbor_cells, cell_coordinates = metadata[,c("x","y")]), simulated_cellmetadata_path)
 

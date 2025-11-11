@@ -1,6 +1,9 @@
-library(scater)
-library(SpatialExperiment)
-library(dplyr)
+suppressMessages({
+  library(scater)
+  library(SpatialExperiment)
+  library(dplyr)
+})
+
 # An useful error if the argument is missing
 if (is.null(snakemake@input[["inflated_counts"]]) | is.null(snakemake@output[["normalized_counts"]]) ){
   stop("Argument_name needs to be specified, but is missing.n", call.=FALSE)

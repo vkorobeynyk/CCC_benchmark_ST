@@ -83,7 +83,8 @@ LR_expanded = pd.DataFrame(LR_expanded.tolist(), columns=["expanded", "ligand_re
 # Keep only unique "expanded" values
 LR_expanded = LR_expanded.drop_duplicates(subset="expanded").reset_index(drop=True)
 
-# Running the analysis #
+# gene level permutation
+# Identifies which LR are spatially co-expressed more than expected 
 st.tl.cci.run(adata, LR_expanded["expanded"].to_numpy(),
               min_spots=0,  # Filter out any LR pairs with no scores for less than min_spots
               distance=l,  # None defaults to spot+immediate neighbours; distance=0 for within-spot mode
@@ -93,7 +94,8 @@ st.tl.cci.run(adata, LR_expanded["expanded"].to_numpy(),
 
 st.tl.cci.adj_pvals(adata, correct_axis='spot', pval_adj_cutoff=0.05, adj_method='fdr_bh')
 
-# Running the counting of co-occurence of cell types and LR expression hotspots #
+# celltype celltype enrichment and permutation
+# Summarizes those LR pairs between annotated cell types and check if those connections occur more often than expected
 st.tl.cci.run_cci(adata, 'Celltype',  # Spot cell information either in data.obs or data.uns
                   min_spots=0,          # Minimum number of spots for LR to be tested.
                   spot_mixtures=False,   # If True will use the label transfer scores,

@@ -2,15 +2,17 @@
 fgg
 '
 
-# Load package
-library(ggplot2)
-library(dplyr)
-library(stringr)
-library(CellChat)
-library(jsonlite)
-library(magrittr)
-library(purrr)
-source("scripts/helper_functions.R")
+suppressMessages({
+  # Load package
+  library(ggplot2)
+  library(dplyr)
+  library(stringr)
+  library(CellChat)
+  library(jsonlite)
+  library(magrittr)
+  library(purrr)
+  source("scripts/helper_functions.R")
+})
 
 # An useful error if the argument is missing
 if (is.null(snakemake@input[["normalized_counts"]]) | is.null(snakemake@input[["cellmetadata_post_simulation"]]) 
@@ -44,8 +46,8 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/Slideseq2_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_n_neigbors_1_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/Slideseq2_HPC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_1_indexLR_1.json")
+inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_0.5_indexLR_1.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB/simulated_cellmetadata_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_0.5_indexLR_1.json")
 '
 
 # transform json list to individual dataframe
@@ -127,7 +129,7 @@ CellChatDB = CellChatDB.human
 # This means that the nomenclature is LR_database.tsv is the same and compatible with CellChatDB. As the simulation also adds signal to subunits (based on nomenclatiure L1_R1_R2_R3)
 # then I just need to subset CellChatDB to contain the same interaction names.
 # The subunit info splits  the nomenclature(ACVR1B_ACVR2B_CFC1) into 3 subunits (ACVR1B, ACVR2B, CFC1), which means we do not have to change anything there.
-# There are exeptions, like for example when the interaction is "GP complex" or "ACVR1_TGFbR" and it contains subunits that are not present in the name.But this will be filtered anyway.
+# There are exceptions, like for example when the interaction is "GP complex" or "ACVR1_TGFbR" and it contains subunits that are not present in the name.But this will be filtered anyway.
 # As for the cofactors, as I am not simulating them, I simply remove them from the database
 CellChatDB$interaction = CellChatDB$interaction[which(CellChatDB$interaction$interaction_name %in% LR_database$ligand_receptor),]
 
@@ -138,7 +140,7 @@ x = CellChatDB$cofactor %>% apply(.,2, function(x) {return(rep("", length(x)))})
 rownames(x) = rownames(CellChatDB$cofactor)
 CellChatDB$cofactor = x %>% as.data.frame() # cellchat requires dataframe
 
-cellchat@DB = CellChatDB
+cellchat@DB = CellChatDB # dim() same as in LRdatabase
 
 cellchat = subsetData(cellchat) # This step is necessary even if using the whole database
 cellchat = identifyOverExpressedGenes(cellchat)
@@ -163,20 +165,17 @@ Re: nboot  (https://github.com/sqjin/CellChat/issues/244)
 I think the results will not change too much. If nboot = 100, then thresh = 0.05 means there are five permuations having larger 
 communication probabilities. If nboot = 20, then thresh = 0.05 means there are one permutation having larger communication pprobabilities.
 '
-# trim = 0.001 -> 0.1% of cells have to express the gene
+# As we are testing amount of cells that should express each gene, I set trim = 0.001 -> 0.1% of cells have to express the gene 
 cellchat = computeCommunProb(cellchat, type = "truncatedMean", trim = 0.001,
                               distance.use = TRUE, interaction.range = radius, scale.distance = 1, 
                               contact.dependent = FALSE,contact.range = NULL, nboot = 100)
 
-df.net = subsetCommunication(cellchat)
+df.net = subsetCommunication(cellchat, thresh = 1) # threshold of the p-value for determining significant interaction
 
-# cellchat only return pval < 0.05 results but just in case:
-stopifnot(all(df.net$pval < 0.05)) 
+df.net %<>% filter(source == "CT1" & target == "CT2") %>% mutate(ligand_receptor = gsub("—","_",interaction_name),
+                                                                  significant = pval < 0.05, # only returns significant 
+                                                                  statistics = prob) %>% dplyr::arrange(desc(prob))
 
-df.net %<>% mutate(ligand_receptor = gsub("—","_",rownames(df.net)),
-                        significant = TRUE, # only returns significant 
-                        statistics = prob) %>% 
-  arrange(desc(prob))
 
 # save data
-write.table(data.frame(ligand_receptor = df.net$interaction_name , significant = TRUE, statistics = df.net$prob) ,significant_interactions_path)
+write.table(data.frame(ligand_receptor = df.net$interaction_name , significant = df.net$significant, statistics = df.net$prob) ,significant_interactions_path)

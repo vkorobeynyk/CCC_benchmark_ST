@@ -52,7 +52,7 @@ LR_database = pd.read_csv(LR_database_path, sep=" ")
 misty = lrMistyData(adata,
                       resource=LR_database,
                       nz_threshold=0, # this make paraview also see direct neighboorhods (which is supposed to be seen by only justaview)
-                      cutoff=0, # no need to set minimum value for connectivity matrix
+                      cutoff=0.01, # doesnt influence output too much
                       spatial_key='spatial',
                       kernel="gaussian",
                       bandwidth=l,
@@ -92,11 +92,13 @@ plt.savefig(plot_neighbors_path, dpi = 200)
 
 # save data
 LRdata_df = misty.uns["interactions"]
+# importances relate to positive/negative correlation
+# in cases where we have a disbalanced amount of ligand/receptor, we have negative correlation, that is still an interesting observation to take into account
+# so we convert all importances to positive for ranking purposes
+LRdata_df["importances"] = LRdata_df["importances"].abs() 
 LRdata_df["statistics"] = LRdata_df["importances"] # for ranking inflated LR we are only interested in communication between sender and environment and not environment to sender
 LRdata_df = LRdata_df.sort_values("statistics", ascending=False) # sort importance column on descending order (higher importance first)
 LRdata_df["ligand_receptor"] = LRdata_df["predictor"] + "_" + LRdata_df["target"] # intra view we have receptors and para view ligands. Thats why its predictor_target
+LRdata_df["significant"] = LRdata_df["importances"] > 2 # importance of 2 was used in the paper as a filtering criteria
 
-
-LRdata_df["significant"] = LRdata_df["importances"]>2 # importance of 2 was used in the paper as a filtering criteria
-LRdata_df = LRdata_df.rename({"morans_pvals":"pval"},axis=1)
 LRdata_df.to_csv(significant_interactions_path, sep = "\t")

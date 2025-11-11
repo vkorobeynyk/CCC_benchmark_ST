@@ -8,14 +8,16 @@ A final differential activity score is calculated by multiplying the log2 fold c
 '
 
 # Load package
-library(ggplot2)
-library(dplyr)
-library(stringr)
-library(Giotto)
-library(jsonlite)
-library(magrittr)
-library(purrr)
-source("scripts/helper_functions.R")
+suppressMessages({
+  library(ggplot2)
+  library(dplyr)
+  library(stringr)
+  library(Giotto)
+  library(jsonlite)
+  library(magrittr)
+  library(purrr)
+  source("scripts/helper_functions.R")
+})
 
 # An useful error if the argument is missing
 if (is.null(snakemake@input[["normalized_counts"]]) | is.null(snakemake@input[["cellmetadata_post_simulation"]]) 
@@ -48,16 +50,18 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB//simulated_cellmetadata_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_1.json")
+inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_0.5_indexLR_1.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB//simulated_cellmetadata_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_0.5_indexLR_1.json")
 '
 
 # transform json list to individual dataframe
 cellmetadata = convert_json_to_df(cellmetadata)
 rownames(cellmetadata$metadata) = cellmetadata$metadata$Cell_ID
+cellmetadata$metadata %<>%
+  dplyr::rename(cell_ID = Cell_ID) # giotto wants column name cell_ID
 
 # Create Giotto object
-giotto_obj = createGiottoObject(raw_exprs = inflated_counts,
+giotto_obj = createGiottoObject(expression = inflated_counts,
                                    spatial_locs = cellmetadata$metadata %>% select(x,y),
                                  cell_metadata = cellmetadata$metadata)
 
@@ -75,7 +79,7 @@ LR_database = lapply(lst, function(x) {
     str_split(.,"_") %>%
     expand.grid() %>%
     mutate(ligand_receptor = x$ligand_receptor) %>%
-    rename(ligand = Var1,
+    dplyr::rename(ligand = Var1,
            receptor = Var2,)
   
   all_present = (grid %>% select("ligand","receptor") %>% unlist ) %in% rownames(giotto_obj) %>%
@@ -105,14 +109,14 @@ giotto_obj = createSpatialNetwork(gobject = giotto_obj,
 
 
 # Giotto requires normalization to be performed
-# Since we already importing normalized data, replace in the giotto object
-giotto_obj = normalizeGiotto(giotto_obj)
+# Since we are already importing normalized data, replace in the giotto object
+giotto_obj = suppressWarnings(normalizeGiotto(giotto_obj)) # suppress warning as it complains about library size
 giotto_obj@expression$cell$rna$normalized = giotto_obj@expression$cell$rna$raw
 
 # visualize the spatial network
 plt = spatPlot(gobject = giotto_obj, show_network = T,
          network_color = 'red', spatial_network_name = 'Delaunay_network',
-         point_size = 5, cell_color = 'Celltype_updated', cell_color_code = c("grey","#990099","orange","#0000FF","black"),
+         point_size = 3, cell_color = 'Celltype_updated', cell_color_code = c("grey","#990099","orange","#0000FF","black"),
          title = "Delanuay triangulation network")
 
 ggsave(plot_neighbors_path, plt, device = "png", width = 50, height = 25, units = "cm")
@@ -187,6 +191,7 @@ giotto_LRR_averaged_out = do.call(rbind.data.frame,giotto_LRR_averaged_out) %>%
 
 
 # PI = log2fc * -log10(p.adj)
+# log2fc > 0 means that A-B celltypes colocalize more often than by chance 
 giotto_LRR_averaged_out %<>% select(ligand_receptor,p.adj,log2fc,PI,spat_spearman_cor) %>%
   mutate(significant = p.adj < 0.05,
          statistics = PI) %>%
