@@ -43,8 +43,8 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_7_FC_nReceiverCells_0.5_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB//simulated_cellmetadata_FC_1_FC_nSenderCells_7_FC_nReceiverCells_0.5_indexLR_1.json")
+inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_1_indexLR_1.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB//simulated_cellmetadata_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_1_indexLR_1.json")
 LR_database = read.table("data/LR_database.tsv", row.names = 1)
 '
 
@@ -69,7 +69,7 @@ LR_database = lapply(lst, function(x) {
     str_split(.,"_") %>%
     expand.grid() %>%
     mutate(ligand_receptor = x$ligand_receptor) %>%
-    rename(ligand = Var1,
+    dplyr::rename(ligand = Var1,
            receptor = Var2,)
   
   all_present = (grid %>% select("ligand","receptor") %>% unlist ) %in% rownames(SO_obj) %>%
@@ -153,7 +153,7 @@ for(entry in unique(LR_database$ligand_receptor))
 seurat_LRR_averaged_out = do.call(rbind.data.frame,seurat_LRR_averaged_out) %>%
   mutate(ligand_receptor = rownames(.),
          significant = p_val_adj < 0.05,
-         statistics = p_val) %>%
+         statistics = p_val_adj) %>%
   select(p_val, p_val_adj , ligand_receptor,significant,statistics) %>% # drop the log2fc and pct columns as they dont reflect reality
   arrange(statistics) # sort from lower to higher pvalues
 

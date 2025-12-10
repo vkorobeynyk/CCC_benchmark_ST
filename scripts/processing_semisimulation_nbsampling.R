@@ -142,7 +142,8 @@ p = ggplot(cellmetadata$metadata, aes(x = x, y = y,color = Celltype_updated, siz
   xlab("x") +
   ylab("y")+  
   scale_color_manual(values = c("#FFCCFF" ,"#990099" ,"#CCCCFF" ,"#0000FF" ,"#FFCC99")) +
-  scale_size_manual(values = c(1.5,3,1.5,3,0.5))
+  scale_size_manual(values = c(2,3,2,3,1)) +
+  theme_bw()
 
 ggsave(filename = plot_neighbors_path, plot = p, width = 200, height = 150, units = "mm")
 

@@ -14,6 +14,7 @@ suppressMessages({
   library(stringr)
   library(Giotto)
   library(jsonlite)
+  library(ggpubr)
   library(magrittr)
   library(purrr)
   source("scripts/helper_functions.R")
@@ -38,6 +39,9 @@ config = yaml::read_yaml("config.yaml")
 
 l_index = (as.integer(snakemake@params["l_index"]) +1)
 dataset = snakemake@params["dataset"] %>% as.character
+indexLR = snakemake@params["indexLR"] %>% as.numeric
+FC_nReceiverCells = snakemake@params["FC_nReceiverCells"] %>% as.numeric
+FC_nSenderCells = snakemake@params["FC_nSenderCells"] %>% as.numeric
 radius = config[["l_param"]][["giotto"]][[dataset]][l_index] %>% unlist
 
 LR_database_path = snakemake@params[["LR_database"]]
@@ -50,8 +54,8 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_0.5_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB//simulated_cellmetadata_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_0.5_indexLR_1.json")
+inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_1.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB//simulated_cellmetadata_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_1.json")
 '
 
 # transform json list to individual dataframe
@@ -121,11 +125,13 @@ plt = spatPlot(gobject = giotto_obj, show_network = T,
 
 ggsave(plot_neighbors_path, plt, device = "png", width = 50, height = 25, units = "cm")
 
+# CURRENTLY NOT USED
 # network-averaging: smoothens the gene expression matrix by averaging the expression within one cell by using the neighbours within the predefined spatial network. 
 # Instead of using k neighbors , we used Delanuay triangulation with specific radius. So the smoothin is done for all cells within radius
 # Here we are computing correlation of gene expression along all combinations of genes within their network
 spatialCorGenes = detectSpatialCorFeats(giotto_obj,
                                         expression_values = "normalized",
+                                        spatial_network_name = "Delaunay_network",
                                         method = "network",
                                         cor_method = "spearman")
 
@@ -197,7 +203,75 @@ giotto_LRR_averaged_out %<>% select(ligand_receptor,p.adj,log2fc,PI,spat_spearma
          statistics = PI) %>%
   arrange(desc(PI))
 
-
+##########################################################################################
+### Plot cumulative expression across distance for simulated LR and 1 significant pair ###
+##########################################################################################
+if(FC_nReceiverCells == 1 & FC_nSenderCells == 1)
+{
+  simulated_genes = readRDS(paste0("output/", dataset, "_semiSimulation_NB/simulated_interactions_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_" ,indexLR , ".RDS")) %>% unlist
+  simulated_genes = c(simulated_genes , giotto_LRR_averaged_out %>% arrange(p.adj) %>% slice(1) %>% pull(ligand_receptor)) %>% str_split("_") %>% unlist
+  plots_lst = list()
+  for(gene in simulated_genes)
+  {
+    net = getSpatialNetwork(giotto_obj)
+    df = net@networkDT
+    
+    # named vector for direct lookup
+    celltype_vec = setNames(cellmetadata$metadata$Celltype, cellmetadata$metadata$cell_ID)
+    
+    df$ctype_from = celltype_vec[df$from]
+    df$ctype_to   = celltype_vec[df$to]
+    
+    gene_expr = inflated_counts[gene, ]
+    
+    df$expr_from = gene_expr[df$from]
+    df$expr_to   = gene_expr[df$to]
+    df$expr_sum = df$expr_from + df$expr_to
+    
+    celltypes = unique(cellmetadata$metadata$Celltype)
+    
+    # you can change bin_size if needed
+    bin_size = 10
+    max_dist = max(df$distance)
+    
+    dist_bins = seq(0, max_dist, by = bin_size)
+    
+    library(dplyr)
+    
+    curve_list = lapply(celltypes, function(ct) {
+      
+      # Select edges where either side has the cell type of interest
+      edges_ct = df %>% 
+        filter(ctype_from == ct | ctype_to == ct)
+      
+      # Compute cumulative expression for each radius
+      data.frame(
+        celltype = ct,
+        radius = dist_bins,
+        total_expr = sapply(dist_bins, function(d)
+          sum(edges_ct$expr_sum[edges_ct$distance <= d], na.rm = TRUE)
+        )
+      )
+    })
+    
+    distance_curve_ct = bind_rows(curve_list)
+    
+    library(ggplot2)
+    
+    p1 = ggplot(distance_curve_ct, aes(x = radius, y = total_expr, color = celltype)) +
+      geom_line(size = 1.2) +
+      geom_point() +
+      theme_classic(base_size = 14) +
+      labs(
+        x = "Distance radius",
+        y = paste("Summed expression of", gene),
+        title = paste("Cumulative gene expression by radius by cell type:", gene)
+      ) +
+      scale_color_brewer(palette = "Dark2") 
+    plots_lst[[gene]] = p1
+  }
+  ggsave(paste0("output/Visium_HD_HPC/giotto/plot_cumulative_expressionbyRadius_l_", l_index), ggarrange(plotlist = plots_lst), device = "png", width = 50, height = 25, units = "cm")
+}
   
 # save data
 write.table(giotto_LRR_averaged_out ,significant_interactions_path)

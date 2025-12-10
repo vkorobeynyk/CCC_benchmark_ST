@@ -28,7 +28,7 @@ all_interactions = read.table(path_significant_interactions, header = T)
 all_interactions$ligand_receptor = gsub("-","_",all_interactions$ligand_receptor)
 # giotto allows to compute A-B neighbors that are spatially enriched or depleted. To be fair with other methods, we are only interested in enriched
 if(method == "giotto") { 
-  all_interactions %<>% filter(log2fc > 0)  # select only significant interactions compared to null
+  all_interactions %<>% filter(log2fc > 0)  # select only significant/positively enriched interactions compared to null
 } else if(method == "mistyR") { 
   all_interactions$importances = abs(all_interactions$importances) # we are including positive and negative correlations
 }

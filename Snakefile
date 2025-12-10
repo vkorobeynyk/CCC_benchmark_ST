@@ -20,7 +20,7 @@ rule all:
 rule run_processing:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=20000
     input:
         counts="data/{dataset}/counts_{dataset}.tsv",
         metadata="data/{dataset}/metadata_{dataset}.tsv"
@@ -42,7 +42,7 @@ rule run_processing:
 rule run_semiSimulation_inflateCounts:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         processed_counts="data/processed/{dataset}/processed_counts_{dataset}.tsv",
         genemetadata="data/processed/{dataset}/genemetadata_{dataset}.RDS",
@@ -66,7 +66,7 @@ rule run_semiSimulation_inflateCounts:
 rule run_normalization:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         inflated_counts="output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv"
     output:
@@ -107,30 +107,14 @@ rule run_method_lianaP_morans:
     container:
         "sing_container/lianaPlus.sif"
     params:
+      FC_nReceiverCells = "{FC_nReceiverCells}",
+      FC_nSenderCells = "{FC_nSenderCells}",
+      indexLR = "{indexLR_toSample}",
       l_index = "{l_param_index}",
       dataset = "{dataset}",
       LR_database=config["LR_database"]
     script:
         "scripts/method_lianaP_morans.py"
-        
-rule run_method_lianaP_lee:
-    threads: 1
-    resources:
-        mem_mb=5000
-    input:
-        normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
-        cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
-    output:
-        significant_interactions="output/{dataset}/lianaP_lee/significant_interactions_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        plot_neighbors="output/{dataset}/lianaP_lee/plot_selected_neighbors_lianaP_lee_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.png"
-    container:
-        "sing_container/lianaPlus.sif"
-    params:
-      l_index = "{l_param_index}",
-      dataset = "{dataset}",
-      LR_database=config["LR_database"]
-    script:
-        "scripts/method_lianaP_lee.py"
         
 rule run_method_spatialdm:
     threads: 1
@@ -222,6 +206,9 @@ rule run_method_giotto:
     container:
         "sing_container/giotto.sif"
     params:
+      FC_nReceiverCells = "{FC_nReceiverCells}",
+      FC_nSenderCells = "{FC_nSenderCells}",
+      indexLR = "{indexLR_toSample}",
       l_index = "{l_param_index}",
       dataset = "{dataset}",
       LR_database=config["LR_database"]

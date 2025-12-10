@@ -1,5 +1,11 @@
 '
-fgg
+1- To infer the cell state-specific communications, CellChat identifies over-expressed ligands or receptors in one cell group and then 
+identifies over-expressed ligand-receptor interactions if either ligand or receptor are over-expressed.
+Cellchat also provides a function to project gene expression data onto protein-protein interaction (PPI) network. 
+Specifically, a diffusion process is used to smooth genes’ expression values based on their neighbors’ defined in a high-confidence 
+experimentally validated protein-protein network.
+2- CellChat infers the biologically significant cell-cell communication by assigning
+each interaction with a probability value and peforming a permutation test
 '
 
 suppressMessages({
@@ -46,8 +52,8 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_0.5_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB/simulated_cellmetadata_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_0.5_indexLR_1.json")
+inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_1.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB/simulated_cellmetadata_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_1.json")
 '
 
 # transform json list to individual dataframe
@@ -69,32 +75,34 @@ distance_mat = apply(coord, 1, function(pt)
 )
 
 # generate a list where each index name is sender cell and it contains all cells within the radius seen by the method
-CT1 = colnames(cellmetadata$neighbor_cells)
-CT2 = unlist(cellmetadata$neighbor_cells)
-CT1_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype_updated == "CT1_signalAdded"]
-CT2_signalAdded = cellmetadata$metadata$Cell_ID[cellmetadata$metadata$Celltype_updated == "CT2_signalAdded"]
-vec = map(CT1, function(cell_OI) {
+CT1 = cellmetadata$metadata %>% filter(Celltype == "CT1") %>% pull(Cell_ID)
+CT2 = cellmetadata$metadata %>% filter(Celltype == "CT2") %>% pull(Cell_ID)
+CT1_signalAdded = cellmetadata$metadata %>% filter(Celltype_updated == "CT1_signalAdded") %>% pull(Cell_ID)
+CT2_signalAdded = cellmetadata$metadata %>% filter(Celltype_updated == "CT2_signalAdded") %>% pull(Cell_ID)
+vec = map(CT1_signalAdded, function(cell_OI) {
   simulated_neighbors = cellmetadata$neighbor_cells[,cell_OI]
   
-  within_radius = distance_mat[,grep(cell_OI, colnames(distance_mat))] < radius
-  return(within_radius)
+  within_radius = distance_mat[,cell_OI == colnames(distance_mat)] < radius
+  return(which(within_radius))
   
-}) %>% as.data.frame()
+}) %>% as.list
 
-rownames(vec) = colnames(distance_mat)
-all_cells_seen_byMethod = vec[rowSums(vec)>0,] %>% rownames
+all_cells_seen_byMethod = colnames(distance_mat)[unlist(vec) %>% unique]
+all_cells_seen_byMethod = all_cells_seen_byMethod[!all_cells_seen_byMethod %in% CT1_signalAdded] # remove CT1 cells
 
 # plot
 plt = ggplot(coord, aes(x = x ,y = y)) + 
   geom_point(size = 0.1) +
-  geom_point(data=coord[all_cells_seen_byMethod,] , aes(x=x, y=y), colour="black", size=3) +
+  geom_point(data=coord[all_cells_seen_byMethod,] , aes(x=x, y=y), colour="orange", size=2) +
+  geom_point(data=coord[CT1,] , aes(x=x, y=y), colour="#FFCCFF", size=2) +
   geom_point(data=coord[CT1_signalAdded,] , aes(x=x, y=y), colour="#990099", size=3) +
   geom_point(data=coord[CT2_signalAdded,] , aes(x=x, y=y), colour="#0000FF", size=3) +
-  ggtitle("NICHES euclidean radius filtering | black -> cells within radius | purple -> CT1_signalAdded | blue -> CT2_signalAdded")+
+  ggtitle("Cellchat euclidean filtering pink -> CT1 |orange -> cells seen by method | purple -> CT1_signalAdded | blue -> CT2_signalAdded")+
   theme(axis.ticks.y=element_blank(),
         axis.ticks.x=element_blank(),
         axis.text.x=element_blank(),
-        axis.text.y=element_blank())
+        axis.text.y=element_blank()) +
+  theme_bw()
 
 ggsave(plot_neighbors_path, plt, device = "png", width = 30, height = 25, units = "cm")
 
@@ -110,8 +118,6 @@ spatial.factors = data.frame(ratio = 1, tol = 1)
 
 # Create a CellChat object
 cellchat = createCellChat(object = inflated_counts, meta = data.frame(Celltype = cellmetadata$metadata$Celltype,
-                                                                   x = coord$x,
-                                                                   y = coord$y,
                                                                    samples = "sample1" %>% as.factor, 
                                                                    row.names = cellmetadata$metadata$Cell_ID), 
                            group.by = "Celltype",datatype = "spatial", coordinates = as.matrix(coord), spatial.factors = spatial.factors)
@@ -143,8 +149,10 @@ CellChatDB$cofactor = x %>% as.data.frame() # cellchat requires dataframe
 cellchat@DB = CellChatDB # dim() same as in LRdatabase
 
 cellchat = subsetData(cellchat) # This step is necessary even if using the whole database
-cellchat = identifyOverExpressedGenes(cellchat)
-cellchat = identifyOverExpressedInteractions(cellchat, variable.both = F)
+# wilcoxon test to remove features
+# only uses pvalue threshold
+cellchat = identifyOverExpressedGenes(cellchat,min.cells = 0,thresh.fc = 0,thresh.p = 0.05) 
+cellchat = identifyOverExpressedInteractions(cellchat) # 
 
 '
 When inferring contact-dependent or juxtacrine signaling, users should provide a value of contact.range and set contact.dependent = TRUE. 

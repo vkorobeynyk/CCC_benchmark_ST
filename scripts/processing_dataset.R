@@ -107,7 +107,8 @@ p = ggplot(metadata, aes(x = x, y = y,color = Celltype, size = Celltype)) +
   xlab("x") +
   ylab("y") +  
   scale_color_manual(values = c("#990099","#0000FF", "orange"))+
-  scale_size_manual(values = c(2,2,0.75))
+  scale_size_manual(values = c(2,2,1)) +
+  theme_bw()
 
 ggsave(filename = plot_allneighbors_path, plot = p, width = 200, height = 150, units = "mm")
 

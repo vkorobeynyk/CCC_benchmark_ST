@@ -202,7 +202,7 @@ compute_diagnostic_plots = function(counts , master_lst, indexLR ,FC_nSenderCell
     n = grep(paste0("FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"],"_indexLR_",x["indexLR"]), names(master_lst))
     file = names(master_lst)[n]
     # Select what genes to label as L_R
-    LR_genes_color = c(master_lst[[file]]$CT1,master_lst[[file]]$CT2)
+    LR_genes_color = c(master_lst[[file]]$CT1,master_lst[[file]]$CT2) %>% str_split(., "_") %>% unlist # for cases when we have R1_R2 subunits
     
     # as max_N_neighbors changes the amount of cells that I inflated counts into, I have to comptue avelogCPM for every different n_neighbor param
     metadata = master_lst[[file]]$simulated_cellmetadata$metadata
@@ -269,3 +269,95 @@ convert_json_to_df = function(json_lst)
   return(out)
 }
 
+cumulative_expression = function(gene, seed,counts, cellmetadata) 
+{
+  set.seed(seed)
+  
+  # select randomly same number of cells for every celltype
+  metadata = cellmetadata$metadata %>%
+    group_by(Celltype) %>%
+    sample_n(size = 50) %>%
+    ungroup()
+  
+  counts_subset = counts[,metadata$Cell_ID]
+  # compute distances between all possible cells/spots
+  df = st_as_sf(metadata %>% select(x,y), coords=1:2)
+  dm = st_distance(df)
+  
+  # named vector for direct lookup
+  celltype_vec = setNames(metadata$Celltype, metadata$Cell_ID)
+  
+  # add celltype to cellnames for next step
+  colnames(dm) = rownames(dm) = colnames(counts_subset) %>% stringr::str_c(., "-", celltype_vec)
+  
+  df_long = dm %>%
+    as.data.frame() %>%
+    tibble::rownames_to_column("from") %>%
+    tidyr::pivot_longer(
+      cols = -from,
+      names_to = "to",
+      values_to = "distance"
+    ) %>% 
+    dplyr::filter(distance != 0) # drop self-distance
+  
+  # add celltype column
+  df_long$ctype_from = str_split(df_long$from, "-") %>% lapply(.,"[[",2) %>% unlist
+  df_long$ctype_to   = str_split(df_long$to, "-") %>% lapply(.,"[[",2) %>% unlist
+  df_long$from = str_split(df_long$from, "-") %>% lapply(.,"[[",1) %>% unlist # remove celltype info from cellnames
+  df_long$to   = str_split(df_long$to, "-") %>% lapply(.,"[[",1) %>% unlist # remove celltype info from cellnames
+  
+  gene_expr = counts_subset[gene, ]
+  
+  df_long$expr_from = gene_expr[df_long$from] %>% as.numeric
+  df_long$expr_to   = gene_expr[df_long$to] %>% as.numeric
+  df_long$expr_sum =  df_long$expr_to  %>% as.numeric# for RECEPTORS
+  #df_long$expr_sum =  df_long$expr_from # for LIGANDS
+  #df_long$expr_sum =  df_long$expr_from + df_long$expr_to # for RECEPTORS + LIGANDS
+  
+  celltypes = unique(metadata$Celltype)
+  
+  # you can change bin_size if needed
+  bin_size = 50
+  max_dist = 500 # max(df_long$distance)
+  
+  dist_bins = seq(0, max_dist, by = bin_size)
+  
+  curve_list = lapply(celltypes, function(sender) {
+    
+    ##############
+    # FIX SENDER #
+    ##############
+    edges_ct = df_long %>% 
+      filter(ctype_from == sender)
+    
+    ################
+    # FIX RECEIVER #
+    ################
+    lapply(celltypes[celltypes != sender], function(receiver) {
+      # Compute cumulative expression for each radius
+      edges_ct2 = edges_ct %>% 
+        filter(ctype_to == receiver)
+      
+      data.frame(
+        sender_receiver = paste(sender, receiver),
+        radius = dist_bins,
+        total_expr = sapply(dist_bins, function(d) sum(edges_ct2$expr_sum[edges_ct2$distance <= d], na.rm = TRUE)
+        )
+      )
+    })
+  })
+  
+  distance_curve_ct = bind_rows(curve_list)
+  
+  p1 = ggplot(distance_curve_ct, aes(x = radius, y = total_expr, color = sender_receiver)) +
+    geom_line(size = 1.2) +
+    geom_point() +
+    theme_classic(base_size = 14) +
+    labs(
+      x = "Distance",
+      y = paste("Summed normalized expression of", gene),
+      title = paste("Cumulative gene expression by radius:", gene)
+    ) +
+    scale_color_brewer(palette = "Dark2") 
+  return(list(distance_curve_ct = distance_curve_ct, plot = p1))
+}

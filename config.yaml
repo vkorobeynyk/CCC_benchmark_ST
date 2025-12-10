@@ -3,14 +3,14 @@ datasets: ["Visium_HD_HPC"] #, "MERFISH_mColon" , "Slideseq2_HPC" ,"CosMx_HFC"] 
 
 semiSimulation:
     FC: [1] # Fold change parameter. Is used to multiply the estimated mean in the NB sampling. Currently not used as spatial transcriptomics data is very sparse by default
-    FC_nSenderCells: [0.5,1,3,5,7,9] # FC of Sender cells whose ligand expression will be added. Fraction of cells is calculated average_percentageCells_expressingLR * FC_nSenderCells * Number of sending cells
-    FC_nReceiverCells: [0.5,1,3,5,7,9] # FC of Receiver cells whose receptor expression will be added. Number of cells is calculated average_percentageCells_expressingLR * FC_nReceiverCells * Number of receiver cells
+    FC_nSenderCells: [1,2,3,5,7] # FC of Sender cells whose ligand expression will be added. Fraction of cells is calculated average_percentageCells_expressingLR * FC_nSenderCells * Number of sending cells
+    FC_nReceiverCells: [1,2,3,5,7] # FC of Receiver cells whose receptor expression will be added. Number of cells is calculated average_percentageCells_expressingLR * FC_nReceiverCells * Number of receiver cells
 
 # Ligand-receptor database to use -> comes from liana. More info can be found in data/InfoAbout_LR_database file
 LR_database: "data/LR_database.tsv"
 
 # This is the maximum amount of receiver cells neighbors that will be considered to add signal to.
-# 1 means we just want closes neighbor. For not, values above 1 will give in error
+# 1 means we just want closes neighbor. For now, values above 1 will give in error
 max_N_neighbors: [1]
 
 # Index of ligand receptor pairs to inflate expression
@@ -31,13 +31,13 @@ l_param:
     CosMx_HFC: [100,200,300]
     Slideseq2_HPC: [40,60,80] 
     MERFISH_mColon: [20,40,60]
-    Visium_HD_HPC: [100,150,225] 
+    Visium_HD_HPC: [100,200,300]
   NICHES:
     STARmap_plus_HPC: [300,500,700]
     CosMx_HFC: [100,200,300]
     Slideseq2_HPC: [40,60,80] 
     MERFISH_mColon: [20,40,60]
-    Visium_HD_HPC: [100,150,200]
+    Visium_HD_HPC: [100,200,300]
   CellChat:
     STARmap_plus_HPC: [300,500,700]
     CosMx_HFC: [100,200,300]

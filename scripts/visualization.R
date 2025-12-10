@@ -16,6 +16,7 @@ suppressMessages({
   library(SpatialExperiment)
   library(ComplexHeatmap)
   library(ggspavis)
+  library(sf)
   library(fmsb)
   source("scripts/helper_functions.R")
 })
@@ -127,7 +128,11 @@ for(dataset in datasets)
       set.seed(1)
       gene_names = master_lst_diagnosticPlots[[naming]][[CT]] %>% unlist
       
-      # only works if gene_names has no subunits. R1_R2 will not work correctly here
+      # in case there are subunits, separate the genes
+      if(grepl("_", gene_names)) {
+        gene_names = str_split(gene_names, "_") %>% unlist
+        } 
+      
       for(gene in gene_names)
       {
         tmp_metadata = master_lst_diagnosticPlots[[naming]][["simulated_cellmetadata"]]$metadata
@@ -188,6 +193,46 @@ for(dataset in datasets)
   
   diagnostic_plots_perCT[[dataset]] = compute_diagnostic_plots(counts = original_counts, master_lst = master_lst_diagnosticPlots, indexLR = indexLR,
                                                                FC_nSenderCells = FC_nSenderCells, FC_nReceiverCells = FC_nReceiverCells, dataset = dataset, CT_toPlot = c("CT1","CT2")) # CT_toPlot has to be same as above
+  
+  ############################################################################
+  ##### Plot cumulative gene expression by radius for all receptor genes #####
+  LR_database = read.table("data/LR_database.tsv")
+  genes = LR_database$receptor %>% str_split("_") %>% unlist %>% unique
+  genes = genes[genes %in% rownames(inflated_counts)]
+  
+  cumulative_expression_acrossRadius = list()
+  lst_pvals = list()
+  lst = list()
+  for(gene in genes)
+  {
+    # split the data into groups of 50 cells for each celltype to compute statistics in the end
+    seeds = seq(1:20)
+    for(seed in seeds)
+    {
+      x = cumulative_expression(gene = gene,seed = seed, counts = original_counts, cellmetadata = master_lst_diagnosticPlots[[1]]$simulated_cellmetadata)
+      cumulative_expression_acrossRadius[[gene]][[paste0("seed_",seed)]] = x$plot
+      lst[[gene]][[paste0("seed_",seed)]] = x$distance_curve_ct %>% mutate(seed = paste0("seed_",seed))
+    }
+    # compute statistics for each radius
+    df = do.call(rbind.data.frame, lst[[gene]])
+    
+    # split data by radius
+    dfs = split(df, df$radius)
+    
+    # run ANOVA for each radius
+    lst_pvals[[gene]] = map(dfs, ~ {
+      x = t.test(.x %>% filter(sender_receiver == "CT1 CT2") %>% pull(total_expr), 
+                 .x %>% filter(sender_receiver != "CT1 CT2") %>% pull(total_expr), alternative = "greater")$p.value
+    }) %>% as.data.frame %>% t
+  }
+  
+  df = do.call(cbind.data.frame, lst_pvals)
+  df[is.na(df)] = 1
+  N_genes_CT1CT2_significant = rowSums(df < 0.05)
+  names(N_genes_CT1CT2_significant) = gsub("X", "", names(N_genes_CT1CT2_significant)) %>% as.integer
+  N_genes_CT1CT2_significant = data.frame(radius = names(N_genes_CT1CT2_significant),
+                                          n_significant = N_genes_CT1CT2_significant)
+  
 }
 
 
@@ -202,12 +247,29 @@ for(dataset in datasets)
   #sapply(x, function(x) {do.call(ggarrange,diagnostic_plots_realFC[[dataset]][[x]]) %>% print}) %>% print
   #diagnostic_plots_MeanVar[[dataset]] %>% print
   
+  # generate density plots
+  N = length(diagnostic_gene_densityPlots[[dataset]])
+  indices = round(seq(1, N, length.out = 4))
   
-  do.call(ggarrange,c(diagnostic_gene_densityPlots[[dataset]][[1]][["CT1"]],  
-                      diagnostic_gene_densityPlots[[dataset]][[1]][["CT2"]],
-                      diagnostic_gene_densityPlots[[dataset]][[2]][["CT1"]],  
-                      diagnostic_gene_densityPlots[[dataset]][[2]][["CT2"]], common.legend = TRUE)) %>% print
+  do.call(ggarrange,c(diagnostic_gene_densityPlots[[dataset]][indices][[1]][["CT1"]],  
+                      diagnostic_gene_densityPlots[[dataset]][indices][[2]][["CT2"]],
+                      diagnostic_gene_densityPlots[[dataset]][indices][[3]][["CT1"]],  
+                      diagnostic_gene_densityPlots[[dataset]][indices][[4]][["CT2"]], common.legend = TRUE)) %>% print
   
+  barplot(N_genes_CT1CT2_significant$n_significant,
+          names.arg = N_genes_CT1CT2_significant$radius,
+          xlab = "radius",
+          ylab = "count of significant results",
+          main = "Amount of Receptors for CT1-CT2 whose cumulative expression is statistically significant for each radius",
+          col = "lightblue") %>% print
+  
+  
+  ggarrange(plotlist = list(cumulative_expression_acrossRadius[[1]]$seed_1, 
+                            cumulative_expression_acrossRadius[[2]]$seed_5 , 
+                            cumulative_expression_acrossRadius[[3]]$seed_8,
+                            cumulative_expression_acrossRadius[[4]]$seed_15, 
+                            cumulative_expression_acrossRadius[[5]]$seed_12,
+                            cumulative_expression_acrossRadius[[6]]$seed_19))
   dev.off()
 }
 
@@ -278,8 +340,33 @@ for(dataset in datasets)
       filenames = statistics_results_lst_recallprecision_plot[[dataset]][[method]] %>% 
         rownames() %>% 
         extract(grepl(naming, .))
+      
       tmp_lst[[row]] = statistics_results_lst_recallprecision_plot[[dataset]][[method]][filenames,] %>% colMeans()
       
+      ###########################################################################
+      ##### Calculate % of cells from cellmetadata that we added signal to  #####
+      
+      # we dont care about l parameter nor indexLR as that doesnt affect amount of cells meaning all files in simulated_cellmetadata_file should contain same %
+      # load correct simulated_cellmetadata file depending on the params_grid
+      simulated_cellmetadata_file = simulated_cellmetadata_files %>% extract(grepl(paste0("_FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"]), simulated_cellmetadata_files))
+      
+      y = read_json(file.path(file_path,simulated_cellmetadata_file[1])) %>% convert_json_to_df # take only 1 file -> to speed up computations
+      y = y$metadata
+      # calculate percentage of "CT1_signal_added" and "CT2_signal_added" cells
+      pct_signal_added = y %>% mutate(
+        parent = case_when(
+          Celltype_updated %in% c("CT1", "CT1_signalAdded") ~ "CT1",
+          Celltype_updated %in% c("CT2", "CT2_signalAdded") ~ "CT2"
+        )
+      ) %>%
+        filter(!is.na(parent)) %>% 
+        group_by(parent) %>%
+        summarise(
+          pct_signal_added = round(100 * mean(grepl("signalAdded", Celltype_updated)))
+        ) 
+      
+      # compute mean across indexLR and add % cellsl
+      tmp_lst[[row]] = c(tmp_lst[[row]] , pct_signal_added) %>% unlist
       names(tmp_lst)[row] = naming
     }
     
@@ -328,9 +415,20 @@ for(dataset in datasets)
   ranking_LRgenes_lst_plot[[dataset]] = do.call(rbind, ranking_LRgenes_lst_plot[[dataset]])
   
   
+  ###########################
+  ##### Plot showing FP #####
+  
+  tmp_df = statistics_results_lst_recallprecision_plot[[dataset]]
+  FP = ggplot(tmp_df, aes(y = FP, x = method, color = method)) +
+    geom_point() +
+    scale_y_log10() +
+    ylab("FP")
+  
+  
   #######################
   ##### UpSet plots #####
   
+  # TODO
   master_lst_precision_recall$significant_interactions$cellchat
   
   ##########################################
@@ -340,14 +438,18 @@ for(dataset in datasets)
     group_by(ratio_ReceiverSender,method ) %>%
     summarise_at(vars(precision,recall), mean)
   
+  # dont average across ratio_ReceiverSender
+  tmp_df2 = statistics_results_lst_recallprecision_plot[[dataset]] %>%
+    mutate(ratio_ReceiverSender = (FC_nReceiverCells/FC_nSenderCells) %>% log2)
   
-  p = ggplot(tmp_df, aes(y = precision, x = recall , color = method)) + 
-    geom_point(size = 3) + 
-    facet_grid(~ratio_ReceiverSender) +
-    geom_line() + 
-    ggtitle(paste0("ratio_ReceiverSender: log2(FC_nReceiverCells/FC_nSenderCells) | Averaged across l and when FC_nReceiverCells==FC_nSenderCells"))+
-    scale_x_continuous(labels = scales::number_format(accuracy = 0.01)) +
-    scale_y_continuous(labels = scales::number_format(accuracy = 0.01)) 
+  p = ggplot(tmp_df2, aes(x = precision, y = recall)) +
+    geom_density_2d(
+      aes(fill = after_stat(level)), 
+      contour_var = "ndensity",
+      h = c(0.1,0.1) # fine tude KDE bandwidth as some methods have very low variance and density estimation doesnt work
+    ) +
+    facet_wrap(~ method, ncol = 4) +
+    labs(title = "Independent 2D Density per method")
   
   ###################################
   ##### Generate f1 score plots #####
@@ -369,16 +471,11 @@ for(dataset in datasets)
     scale_y_continuous(breaks=l_param_index) +
     ylab("Index of l parameter")
   
-  d = tmp_df  %>%
-    mutate(ratio_ReceiverSender = (FC_nReceiverCells/FC_nSenderCells) %>% log2) %>% 
-    group_by(ratio_ReceiverSender,method ) %>%
-    summarise_at(vars(f1score), mean)
-  
-  p1 = ggplot(d, aes(x = ratio_ReceiverSender, y = f1score, color = method)) + 
-    geom_point() +
-    geom_line() +
-    ggtitle("f1 score of every method when increasing of Receiver cells | Averaged across l and when FC_nReceiverCells==FC_nSenderCells ") +
-    xlab("ratio_ReceiverSender (log2 scale - negative -> more Senders)")
+  p1 = ggplot(tmp_df, aes(x = pct_signal_added, y = f1score, color = method)) + 
+    geom_point(size = 0.5) +
+    geom_smooth(se = FALSE, span = 0.5) +
+    facet_wrap(~ l)+
+    ggtitle("F1score as a function of percentage of cells expressing L/R faceted by L param") 
   
   ##########################################
   ##### Generate ranking LR genes plot #####
@@ -399,14 +496,6 @@ for(dataset in datasets)
       title = "Amount of NaN - method didnt find the simulated LR pair"
     ) +
    scale_y_continuous(breaks = 0:max(d$n_na))
-  
-  # Plot rank according to FC of sender and receiver cells
-  p3 = ggplot(tmp_df %>% na.omit,aes(x = FC_nSenderCells, y = FC_nReceiverCells, color = method,size = rank)) + 
-    ylab("FC_nReceiverCells") +
-    facet_grid(~l) +
-    geom_jitter(width = 0.2, height = 0.2) +
-    ggtitle("rank of retrieved LR pairs | for some params/methods no significant were found") +
-    scale_size_continuous(name = "log10(rank)")
   
   tmp_df2 = tmp_df %>%
     na.omit %>%
@@ -430,10 +519,10 @@ for(dataset in datasets)
   pdf(file.path(path_results_dir ,paste0(dataset, "_recall_precision_plots.pdf")), width = 12, height = 7)
   p %>% print
   p1 %>% print
-  p3 %>% print
   heatmap1 %>% print
   heatmap2 %>% print
   p2 %>% print
+  FP %>% print
   
   ###################################################################
   ##### summary spider charts across all parameter combinations #####

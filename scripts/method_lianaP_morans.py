@@ -6,6 +6,7 @@ import sys
 import json
 import yaml
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 
 #############
 ### INPUT ###
@@ -33,6 +34,9 @@ with open("config.yaml","r") as stream:
 
 l_index = snakemake.params["l_index"]
 dataset = snakemake.params["dataset"]
+indexLR = int(snakemake.params["indexLR"])
+FC_nReceiverCells = int(snakemake.params["FC_nReceiverCells"])
+FC_nSenderCells = int(snakemake.params["FC_nSenderCells"])
 LR_database_path = snakemake.params["LR_database"]
 
 l = config["l_param"]["lianaP"][dataset][np.int64(l_index)]
@@ -95,3 +99,62 @@ LRdata_df = LRdata_df.rename({"morans_pvals":"statistics"},axis=1)
 LRdata_df = LRdata_df.sort_values("statistics") # sort importance column on ascending order
 LRdata_df["ligand_receptor"] = LRdata_df["ligand"] + "_" + LRdata_df["receptor"]
 LRdata_df.to_csv(significant_interactions_path, sep = "\t")
+
+############################################################
+### generate plots which candidates moransI detects well ###
+############################################################
+def plot_gene_spatial(adata, gene, min_expr=0.0, figsize=(6, 6)):
+    # Check gene exists
+    if gene not in adata.var_names:
+        raise ValueError(f"Gene '{gene}' not found in adata.var_names")
+
+    # Extract spatial coordinates
+    coords = adata.obsm["spatial"]
+    x = coords[:, 0]
+    y = coords[:, 1]
+
+    # Extract gene expression
+    expr = adata[:, gene].X.A.flatten() if hasattr(adata[:, gene].X, "A") else np.array(adata[:, gene].X).flatten()
+
+    # Filter cells with expression > min_expr
+    mask = expr > min_expr
+
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot all cells in gray
+    ax.scatter(x, y, s=5, color="lightgray", alpha=0.4)
+
+    # Plot expressing cells colored by expression intensity
+    sc = ax.scatter(
+        x[mask],
+        y[mask],
+        c=expr[mask],
+        s=10,
+        cmap="viridis",
+        edgecolors="none"
+    )
+
+    ax.invert_yaxis()  # common for spatial transcriptomics
+    ax.set_title(f"{gene} expression (n={mask.sum()})")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+
+    cbar = fig.colorbar(sc, ax=ax)
+    cbar.set_label(f"{gene} expression")
+
+    plt.tight_layout()
+    # DO NOT call plt.show() here
+    return fig
+
+# select 2 genes on the bottom and 2 genes on top of list
+n = len(LRdata_df) -1
+genes = [LRdata_df["ligand_receptor"][n].split("_")[0], LRdata_df["ligand_receptor"][n].split("_")[1], 
+         LRdata_df["ligand_receptor"][0].split("_")[0], LRdata_df["ligand_receptor"][0].split("_")[1]]
+if FC_nReceiverCells == 1 & FC_nSenderCells == 1 & indexLR == 1:
+  with PdfPages("output/" + dataset + "/lianaP_morans/plot_spatialDistribution_LR.pdf") as pdf:
+    for gene in genes:
+        # Create the plot
+        plot_gene_spatial(adata, gene)
+        pdf.savefig() 
+        plt.close()

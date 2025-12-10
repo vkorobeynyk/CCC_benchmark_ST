@@ -84,7 +84,7 @@ plt.scatter(cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"x"], cm.loc[cm["Cell_
 plt.xlabel("x_coord_um")
 plt.ylabel("y_coord_um")
 plt.title("purple - sender cells | blue - receiver cells | orange - cells seen by method | color bar - spatial connectivity values",
-          fontsize = 2)
+          fontsize = 8)
             
 plt.savefig(plot_neighbors_path, dpi = 200) 
 

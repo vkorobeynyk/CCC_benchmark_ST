@@ -88,7 +88,7 @@ LR_expanded = LR_expanded.drop_duplicates(subset="expanded").reset_index(drop=Tr
 st.tl.cci.run(adata, LR_expanded["expanded"].to_numpy(),
               min_spots=0,  # Filter out any LR pairs with no scores for less than min_spots
               distance=l,  # None defaults to spot+immediate neighbours; distance=0 for within-spot mode
-              n_pairs=500,  # Number of random pairs to generate; low as example, recommend ~10,000
+              n_pairs=1000,  # Number of random pairs to generate; low as example, recommend ~10,000
               n_cpus=None,   # Number of CPUs for parallel. If None, detects & use all available.
               )
 
@@ -138,23 +138,28 @@ LRdata_df = LRdata_df.sort_values("statistics") # sort importance column on asce
 #########################################
 ### Plot weights according to l param ###
 
-all_sender_cells = cm.loc[cm["Celltype_updated"] == "CT1_signalAdded",]["Cell_ID"].tolist()
-all_receiver_cells = cm.loc[cm["Celltype_updated"] == "CT2_signalAdded",]["Cell_ID"].tolist()
+CT1 = cm.loc[cm["Celltype"] == "CT1",]["Cell_ID"].tolist()
+CT2 = cm.loc[cm["Celltype"] == "CT2",]["Cell_ID"].tolist()
+CT1_signalAdded = cm.loc[cm["Celltype_updated"] == "CT1_signalAdded",]["Cell_ID"].tolist()
+CT2_signalAdded = cm.loc[cm["Celltype_updated"] == "CT2_signalAdded",]["Cell_ID"].tolist()
 # get all cells that method "sees"
-cells_seen_by_method = [item for sublist in adata.obsm["spot_neigh_bcs"]["neighbour_bcs"] for item in sublist.split(",") if item != ""]
+cells_seen_by_method = [item for sublist in adata.obsm["spot_neigh_bcs"]["neighbour_bcs"][CT1_signalAdded] for item in sublist.split(",") if item != ""]
+cells_seen_by_method = list(set(cells_seen_by_method) - set(CT1)) # subtract CT1 cells
 
 plt.scatter(cm.loc[:,"x"], cm.loc[:,"y"], 
-            c= "grey", s = 5)
+            c= "grey", s = 2)
+plt.scatter(cm.loc[cm["Cell_ID"].isin(CT1),"x"], cm.loc[cm["Cell_ID"].isin(CT1),"y"], 
+            c= "#FFCCFF", s = 8)
 plt.scatter(cm.loc[cm["Cell_ID"].isin(cells_seen_by_method),"x"], cm.loc[cm["Cell_ID"].isin(cells_seen_by_method),"y"], 
-            c= "orange", s = 5)
-plt.scatter(cm.loc[cm["Cell_ID"].isin(all_sender_cells),"x"], cm.loc[cm["Cell_ID"].isin(all_sender_cells),"y"], 
-            c= "#990099", s = 5)
-plt.scatter(cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"x"], cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"y"], 
-            c= "#0000FF", s = 5)
+            c= "orange", s = 8)
+plt.scatter(cm.loc[cm["Cell_ID"].isin(CT1_signalAdded),"x"], cm.loc[cm["Cell_ID"].isin(CT1_signalAdded),"y"], 
+            c= "#990099", s = 12)
+plt.scatter(cm.loc[cm["Cell_ID"].isin(CT2_signalAdded),"x"], cm.loc[cm["Cell_ID"].isin(CT2_signalAdded),"y"], 
+            c= "#0000FF", s = 12)
 plt.xlabel("x_coord_um")
 plt.ylabel("y_coord_um")
 plt.title("purple - sender cells | blue - receiver cells | orange - cells seen by method",
-          fontsize = 2)
+          fontsize = 8)
             
 plt.savefig(plot_neighbors_path, dpi = 200) 
 
