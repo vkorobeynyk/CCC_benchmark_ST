@@ -6,10 +6,6 @@ semi_simulate = function(counts, simulated_interactions_lst ,fraction_cells_expr
   cell_info = list()
   means_perCT = genemetadata$mean
   
-  tmp_var1 = str_split("CT1_CT2","_")[[1]]
-  CT1 = tmp_var1[1]
-  CT2 = tmp_var1[2]
-  
   L_sample = simulated_interactions_lst$CT1_CT2$ligand %>% str_split("_") %>% unlist
   R_sample = simulated_interactions_lst$CT1_CT2$receptor %>% str_split("_") %>% unlist
   
@@ -21,13 +17,13 @@ semi_simulate = function(counts, simulated_interactions_lst ,fraction_cells_expr
     
     if (tmp_CT == "CTsender" ) { 
       genes_to_sample = L_sample
-      CT = CT1
+      CT = "CT1"
       N_cells_fromFraction = (length(colnames(df_neighbors)) * fraction_cells_expressingL) %>% floor
       cells_toAdd_signal = sample(colnames(df_neighbors), N_cells_fromFraction)
       
     } else if (tmp_CT == "CTreceiver") {
       genes_to_sample = R_sample
-      CT = CT2
+      CT = "CT2"
       
       # sample receiver cells according to ratio of fraction_cells_expressingL / fraction_cells_expressingR
       if(fraction_cells_expressingR/fraction_cells_expressingL == 1)
@@ -92,16 +88,17 @@ semi_simulate = function(counts, simulated_interactions_lst ,fraction_cells_expr
 }
 
 # Based on spatial coordinates data, this function selects neighboring cells 
-find_neighboring_spots = function(spatial_coords, max_N_neighbors, ligand_spots, receptor_spots, remove_spots)
+find_neighboring_spots = function(spatial_coords, ligand_spots, receptor_spots, remove_spots)
 {
-  # max_N_neighbors -> amount of neighboring spots/cells
-  # ligand_spots -> spots/cells around which to select neighbors 
+  # ligand_spots -> cells/spots around which to select neighbors 
   # spatial_coords -> spatial coordinates. dataframe with 1 and 2 column being the coordinates, rownames must be cellnames
-  # remove_spots -> logical if to remove spots based on mean distance
+  # remove_spots -> logical, if to remove spots based on mean distance, Recommended = TRUE
   # CT1 -> name of celltype sender
   # CT2 -> name of celltype receiver
   
-  # This function returns a metadata dataframe with a Celltype colum specifying Ligand, Receptor or Other spots
+  # This function returns a metadata dataframe with a Celltype column specifying sender, receiver or Other cells/spots and 
+  # another neighbor_spots whihc is a dataframe with sender (names) or receiver cells/spots
+  # The amount of Sender/Receiver cells/spots is the same
   
   # compute distances between all possible cells/spots
   df = st_as_sf(spatial_coords, coords=1:2)
@@ -122,12 +119,13 @@ find_neighboring_spots = function(spatial_coords, max_N_neighbors, ligand_spots,
   receiver_cell_names = rownames(dm)
   for(index in seq_along(1:ncol(dm)))
   {
-    c = receiver_cell_names[dm[,index] %>% order %>% extract(1:max_N_neighbors)]
-    dist = dm[,index] %>% sort %>% extract(1:max_N_neighbors)
+    c = receiver_cell_names[dm[,index] %>% order %>% extract(1)] # extract closest receiver cell
+    dist = dm[,index] %>% sort %>% extract(1)
     
     # Make sure that different ligands dont "see" the same receptor
+    # This doesnt do anything when index == 1
     n = 1
-    while(c %in% neighbors)
+    while(any(c %in% neighbors))
     {
       c = receiver_cell_names[dm[,index] %>% order %>% extract(n)]
       dist = dm[,index] %>% sort %>% extract(n)
@@ -143,22 +141,92 @@ find_neighboring_spots = function(spatial_coords, max_N_neighbors, ligand_spots,
   
   ####################################################################
   ### Remove Receiver cells that are "far" away from Sender cells  ###
+  # Even tough we select the closes cell above, sometimes happens the sender cell is far away and not surrounded by any receiver cells
+  # This script removes those
   if(remove_spots)
   {
-    min_dist = neighbors_dist %>% unlist %>% mean()
+    min_dist = quantile(neighbors_dist,probs = (0.8))["80%"]
     neighbors_dist = neighbors_dist[neighbors_dist < min_dist]
     neighbors = neighbors[names(neighbors) %in% names(neighbors_dist)]
     
     ligand_spots = names(neighbors)
     receiver_spots = unlist(neighbors)
+    
+    # Add Celltype information to metadata file
+    metadata %<>% mutate(Celltype = ifelse(Cell_ID %in% ligand_spots , "CT1", "Other"))
+    metadata$Celltype[which(metadata$Cell_ID %in% receiver_spots)] = "CT2"
+  } else {
+    # Add Celltype information to metadata file
+    metadata %<>% mutate(Celltype = ifelse(Cell_ID %in% ligand_spots , "CT1", "Other"))
+    metadata$Celltype[which(metadata$Cell_ID %in% unlist(neighbors))] = "CT2"
   }
   
-  # Add Celltype information to metadata file
-  metadata %<>% mutate(Celltype = ifelse(Cell_ID %in% ligand_spots , "CT1", "Other"))
-  metadata$Celltype[which(metadata$Cell_ID %in% receiver_spots)] = "CT2"
+  
   
   return(list(metadata = metadata, neighbors = neighbors %>% as.data.frame))
 }
+
+select_HighDensityRegion = function(metadata, neighbor_cells, dataset, sample_cells = 100)
+{
+  ##
+  df = metadata
+  
+  df_binned = df %>%
+    mutate(
+      x_bin = cut(x, breaks = 4),
+      y_bin = cut(y, breaks = 4)
+    )
+  
+  bin_counts = df_binned %>%
+    dplyr::count(x_bin, y_bin, Celltype)
+  
+  bin_wide = bin_counts %>%
+    tidyr::pivot_wider(names_from = Celltype, values_from = n, values_fill = 0)
+  
+  bin_wide = bin_wide %>%
+    mutate(co_score = CT1 * CT2)
+  
+  top_regions = bin_wide %>%
+    dplyr::arrange(desc(co_score)) %>%
+    mutate(cells = CT1 + CT2 + Other)
+  
+  #top_regions %>% arrange(desc(cells))
+  
+  if(dataset == "Visium_HD_HPC")
+  {
+    # from the high density region, select CT1 and CT2 cells according to sample_cells
+    metadata$Celltype = "Other"
+    ct1cells = metadata %>% filter(between(metadata$x, 3.5e+03, 4.87e+03) & between(metadata$y, 1.58e+04, 1.8e+04)) %>% sample_n(sample_cells) %>% pull(Cell_ID)
+    metadata[ct1cells,"Celltype"] = "CT1"
+    ct2cells = metadata %>% filter(between(metadata$x, 3.5e+03, 4.87e+03) & between(metadata$y, 1.58e+04, 1.8e+04) & Celltype != "CT1") %>% sample_n(sample_cells) %>% pull(Cell_ID)
+    metadata[ct2cells,"Celltype"] = "CT2"
+    
+    # generate neighbor_cells dataframe without filtering for far away connetions
+    neighbor_info = find_neighboring_spots(spatial_coords = metadata %>% select(c("x","y")), 
+                                           ligand_spots = metadata %>% filter(Celltype == "CT1") %>% select(Cell_ID) %>% unlist %>% unname, 
+                                           receptor_spots = metadata %>% filter(Celltype == "CT2") %>% select(Cell_ID) %>% unlist %>% unname,
+                                           remove_spots = FALSE)
+    
+  } else {stop(paste0("You must specify coordinates for dataset ", dataset))}
+  
+  # make the amount of CT1 and CT2 cells equal 
+  #x = table(metadata$Celltype)
+  #if(x["CT1"] < x["CT2"])
+  #{
+  #  neighbor_cells = neighbor_cells[metadata$Cell_ID[which(metadata$Celltype == "CT1")]]
+  #  metadata$Celltype = "Other"
+  #  metadata[names(neighbor_cells), "Celltype"] = "CT1"
+  #  metadata[neighbor_cells, "Celltype"] = "CT2"
+  #} else {
+  #  neighbor_cells = neighbor_cells[neighbor_cells %in% metadata$Cell_ID[which(metadata$Celltype == "CT2")]]
+  #  metadata$Celltype = "Other"
+  #  metadata[names(neighbor_cells), "Celltype"] = "CT1"
+  #  metadata[unlist(neighbor_cells), "Celltype"] = "CT2"
+  #}
+  return(list(neighbor_cells = neighbor_info$neighbors,
+              metadata = neighbor_info$metadata))
+}
+
 
 ### Estimates mean and dispersion using edgeR
 estimate_params_edgeR = function(counts , metadata, mm)
@@ -204,7 +272,6 @@ compute_diagnostic_plots = function(counts , master_lst, indexLR ,FC_nSenderCell
     # Select what genes to label as L_R
     LR_genes_color = c(master_lst[[file]]$CT1,master_lst[[file]]$CT2) %>% str_split(., "_") %>% unlist # for cases when we have R1_R2 subunits
     
-    # as max_N_neighbors changes the amount of cells that I inflated counts into, I have to comptue avelogCPM for every different n_neighbor param
     metadata = master_lst[[file]]$simulated_cellmetadata$metadata
     
     # selects cells belonging to the celltype indicated by CT_toPlot
@@ -228,27 +295,6 @@ compute_diagnostic_plots = function(counts , master_lst, indexLR ,FC_nSenderCell
   return(list(avelogcpm = plot_avelogcpm_fixed))
 }
 
-# As theoretical FC that we apply in the semi-simulation actually doesnt represent the practical FC that the data will be transformed with, generate a
-# plot with real FC after semi-simulation
-plot_FCafter_semisimulation = function(vec, indexLR,theoreticalFC, max_N_neighbors)
-{
-  indexLR = indexLR %>% unname()
-  df = data.frame(gene = names(vec), value = vec)
-  median = median(df$value) %>% round(.,2)
-  plot = ggplot(df, aes(x = gene , y = value) ) + 
-    geom_point() +
-    geom_hline(yintercept=theoreticalFC, linetype="dashed", color = "red", linewidth = 1)  + 
-    geom_hline(yintercept=median, linetype="dashed", color = "blue", linewidth = 1)  + 
-    ggtitle(paste0("max_N_neighbors=",max_N_neighbors , " | indexLR=",indexLR , " | theoreticalFC=", theoreticalFC, " | real FC median=",median)) +
-    xlab("LR index") +
-    ylab("FC after simulation") +
-    theme(axis.text.x=element_blank(), #remove x axis labels
-          plot.title = element_text(size=8)  , 
-          axis.text.y = element_text(size = 8)
-    )
-  return(list(plot = plot,theoreticalFC = theoreticalFC,  max_N_neighbors = max_N_neighbors,FC_real_median = median))
-}
-
 # converts json list to dataframes
 # iterates over every index in list and converts it to df
 # when the list only contains 1 integer, converts to vector
@@ -269,14 +315,14 @@ convert_json_to_df = function(json_lst)
   return(out)
 }
 
-cumulative_expression = function(gene, seed,counts, cellmetadata) 
+cumulative_expression = function(gene, seed,counts, cellmetadata, size = 50) 
 {
   set.seed(seed)
   
   # select randomly same number of cells for every celltype
   metadata = cellmetadata$metadata %>%
     group_by(Celltype) %>%
-    sample_n(size = 50) %>%
+    sample_n(size = size) %>%
     ungroup()
   
   counts_subset = counts[,metadata$Cell_ID]

@@ -94,11 +94,10 @@ SO_obj = SO_obj[c(LR_database$ligand,LR_database$receptor) %>% unique %>% as.cha
 # some genes wont be present in output because of min.cells.feature/min.cells.group parameters
 # Perform differential expression to find ligands that are overexpressed in CT1
 Idents(SO_obj) = SO_obj$Celltype
-markers = FindMarkers(SO_obj, slot = "data" , ident.1 = "CT1", ident.2 = "CT2", test.use = "wilcox")
-markers_ligands = markers %>% filter(avg_log2FC > 0)
+markers = FindAllMarkers(SO_obj, slot = "data" , test.use = "wilcox")
+markers_ligands = markers %>% filter(cluster == "CT1") %>% filter(avg_log2FC > 0)
 # Perform differential expression to find receptors that are overexpressed in CT2
-markers = FindMarkers(SO_obj, slot = "data" , ident.1 = "CT2", ident.2 = "CT1", test.use = "wilcox")
-markers_receptors = markers %>% filter(avg_log2FC > 0)
+markers_receptors = markers %>% filter(cluster == "CT2") %>% filter(avg_log2FC > 0)
 
 # Average the results for cases like L-R1-R2 (aggregating L-R1 and L-R2)
 seurat_LRR_averaged_out = list()
@@ -112,8 +111,8 @@ for(entry in unique(LR_database$ligand_receptor))
     receptor = name[2]
     
     # Average over the results
-    markers_ligands_subset = markers_ligands %>% filter(rownames(.) %in% ligand)
-    markers_receptors_subset = markers_receptors %>% filter(rownames(.) %in% receptor)
+    markers_ligands_subset = markers_ligands %>% filter(gene %in% ligand)
+    markers_receptors_subset = markers_receptors %>% filter(gene %in% receptor)
     
     # if at least one of the genes in "name" is not present in the output, then the aggregated result doesnt exist
     if(nrow(markers_ligands_subset) != 1 | nrow(markers_receptors_subset) != 1) {next}
@@ -131,8 +130,8 @@ for(entry in unique(LR_database$ligand_receptor))
     receptor = c(name[2], name[3])
     
     # Average over the results
-    markers_ligands_subset = markers_ligands %>% filter(rownames(.) %in% ligand)
-    markers_receptors_subset = markers_receptors %>% filter(rownames(.) %in% receptor)
+    markers_ligands_subset = markers_ligands %>% filter(gene %in% ligand)
+    markers_receptors_subset = markers_receptors %>% filter(gene %in% receptor)
     
     # if at least one of the genes in "name" is not present in the output, then the aggregated result doesnt exist
     if(nrow(markers_ligands_subset) != 1 | nrow(markers_receptors_subset) != 2) {next}

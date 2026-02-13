@@ -4,16 +4,11 @@ configfile:"config.yaml"
 
 rule all:
     input:
-        run_processing=expand("data/processed/{dataset}/processed_counts_{dataset}.tsv" , 
-            dataset=config["datasets"]),
-        run_semiSimulation_inflateCounts=expand("output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv", FC=config["semiSimulation"]["FC"], FC_nSenderCells=config["semiSimulation"]["FC_nSenderCells"], FC_nReceiverCells=config["semiSimulation"]["FC_nReceiverCells"],dataset=config["datasets"], indexLR_toSample=config["indexLR_toSample"]),
-        run_normalization=expand("output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv" ,FC=config["semiSimulation"]["FC"], FC_nSenderCells=config["semiSimulation"]["FC_nSenderCells"],FC_nReceiverCells=config["semiSimulation"]["FC_nReceiverCells"], dataset=config["datasets"], indexLR_toSample=config["indexLR_toSample"]),
-        run_methods=expand("output/{dataset}/{method}/significant_interactions_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv" ,FC=config["semiSimulation"]["FC"], FC_nSenderCells=config["semiSimulation"]["FC_nSenderCells"],FC_nReceiverCells=config["semiSimulation"]["FC_nReceiverCells"], dataset=config["datasets"], method=config["methods"], l_param_index=config["l_param_index"], indexLR_toSample=config["indexLR_toSample"]),
-        run_metrics=expand("output/{dataset}/metrics/{method}/f1_score_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",FC=config["semiSimulation"]["FC"], FC_nSenderCells=config["semiSimulation"]["FC_nSenderCells"], FC_nReceiverCells=config["semiSimulation"]["FC_nReceiverCells"],dataset=config["datasets"], method=config["methods"], l_param_index=config["l_param_index"], indexLR_toSample=config["indexLR_toSample"])
+        final_scores="output/final_scores.RDS"
     output:
         visualization=directory("output/results")
     shell:
-        'singularity exec --no-home sing_container/liana_edgeR.sif Rscript scripts/visualization.R --config.yaml config.yaml --path_output_dir output --path_results_dir "output/results"'
+        'singularity exec --no-home sing_container/liana_edgeR.sif Rscript scripts/visualization_ruleall.R --config.yaml config.yaml --path_output_dir output --path_results_dir "output/results"'
             
 ################### Processing raw files
 
@@ -31,8 +26,7 @@ rule run_processing:
         plot_allneighbors="data/processed/{dataset}/plot_allneighbors_{dataset}.pdf",
         diagnostic_plots="data/processed/{dataset}/diagnostic_plots_{dataset}.pdf"
     params:
-      LR_database=config["LR_database"],
-      max_N_neighbors=config["max_N_neighbors"]
+      LR_database=config["LR_database"]
     container:
         "sing_container/liana_edgeR.sif"
     script:
@@ -54,8 +48,7 @@ rule run_semiSimulation_inflateCounts:
         metadata_cpdbv5="data/cpdbv5_extrafiles/{dataset}/metadata_cpdbv5_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         plot_neighbors="data/processed/{dataset}/plot_selected_neighbors_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.pdf"
     params:
-    	LR_database=config["LR_database"],
-      	max_N_neighbors=config["max_N_neighbors"]
+    	LR_database=config["LR_database"]
     container:
         "sing_container/liana_edgeR.sif"
     script:
@@ -247,22 +240,18 @@ rule run_method_seurat_wilcoxon:
       dataset = "{dataset}",
       LR_database=config["LR_database"]
     script:
-        "scripts/method_seurat_wilcoxon.R"
+        "scripts/method_seurat_wilcoxon.R"        
 ################## METRICS
 # f1score
-rule run_metric_f1score_rankingLRgenes:
+rule run_metric_f1score_rankingLRgenes_all:
     threads: 1 # workflow.cores
     resources:
         mem_mb=1000
     input:
-        significant_interactions="output/{dataset}/{method}/significant_interactions_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        simulated_interactions="output/{dataset}_semiSimulation_NB/simulated_interactions_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.RDS"
+        significant_interactions=expand("output/{dataset}/{method}/significant_interactions_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv", FC=config["semiSimulation"]["FC"], FC_nSenderCells=config["semiSimulation"]["FC_nSenderCells"], FC_nReceiverCells=config["semiSimulation"]["FC_nReceiverCells"],dataset=config["datasets"], method=config["methods"], l_param_index=config["l_param_index"], indexLR_toSample=config["indexLR_toSample"])
     output:
-    	ranking_LRgenes="output/{dataset}/metrics/{method}/ranking_LRgenes_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv",
-        CT_statistics="output/{dataset}/metrics/{method}/f1_score_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv"
+    	final_scores="output/final_scores.RDS"
     container:
         "sing_container/liana_edgeR.sif"
-    params:
-      method="{method}"
     script:
-        "scripts/metric_f1score_rankingLRgenes.R"
+        "scripts/metric_f1score_rankingLRgenes_ruleall.R"

@@ -47,6 +47,17 @@ cpdb_results = cpdb_statistical_analysis_method.call(
   output_suffix = None                             # Replaces the timestamp in the output files by a user defined string in the  (default: None).
 )
 
+# cellphoneDB retrieves interactions with multiple subunits as ex: FN1_integrin_aVb1_complex
+# change that to FN1_ITGB1_ITGAV
+cpdb_results["pvalues"] = cpdb_results["pvalues"].reset_index(drop=True)
+for row, pair in cpdb_results["pvalues"]["interacting_pair"].items():
+    if "complex" in str(pair):
+        interaction_id = cpdb_results["pvalues"]["id_cp_interaction"].iloc[row]
+        interaction_id_all_genes = cpdb_results["deconvoluted"][cpdb_results["deconvoluted"]["id_cp_interaction"] == interaction_id]
+        interaction_id_joined = "_".join(interaction_id_all_genes["gene_name"].astype(str).tolist())
+
+        cpdb_results["pvalues"]["interacting_pair"][row] = interaction_id_joined
+        
 LRdata_df = pd.DataFrame({"ligand_receptor" : cpdb_results["pvalues"]["interacting_pair"], "pval": cpdb_results["pvalues"]["CT1|CT2"]})
 LRdata_df["significant"] = LRdata_df["pval"] < 0.05
 LRdata_df = LRdata_df.rename({"pval":"statistics"},axis=1)

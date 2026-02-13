@@ -47,6 +47,8 @@ dir.create(path_results_dir)
 ##### Loading and processing files #####
 ########################################
 
+metric_results = readRDS("output/final_scores.RDS")
+
 config = yaml::read_yaml(path_config.yaml)
 
 # Setting parameters
@@ -66,10 +68,11 @@ diagnostic_gene_densityPlots = list()
 diagnostic_plots_realFC = list()
 diagnostic_df_realFC = list()
 diagnostic_plots_perCT = list()
+cumulative_expression_lst = list()
 for(dataset in datasets)
 {
   
-  # LOad visium data to generate a plot
+  # Load visium data to generate a plot
   if(FALSE & dataset %in% c("Visium_HPC_SJ"))
   {
     spe = read10xVisium(file.path("data", dataset)) 
@@ -80,7 +83,7 @@ for(dataset in datasets)
   # Select inflated count files
   file_path = file.path(path_output_dir,paste0(dataset,"_semiSimulation_NB"))
   inflated_counts_files = file_path %>% list.files(., pattern = "inflated_counts")
-
+  
   # Select all simulated interactions files
   simulated_interactions_files = list.files(file_path, pattern = "simulated_interactions")
   
@@ -90,7 +93,7 @@ for(dataset in datasets)
   
   #### Read original counts for visium datasets
   original_counts = read.table(file.path("data/processed",dataset, paste0("processed_counts_",dataset,".tsv")))
-
+  
   # generate the grid of parameters used for naming the list to generate outputs
   # I am not include FC param as it will be deprecated but it doesnt matter if I add it here
   params_grid = expand.grid(indexLR = indexLR, FC_nSenderCells = FC_nSenderCells, FC_nReceiverCells = FC_nReceiverCells)
@@ -131,10 +134,30 @@ for(dataset in datasets)
       # in case there are subunits, separate the genes
       if(grepl("_", gene_names)) {
         gene_names = str_split(gene_names, "_") %>% unlist
-        } 
+      } 
       
       for(gene in gene_names)
       {
+        #####################################################################################
+        ##### cumulative expression for cells where we added signal and all other cells #####
+        
+        m = master_lst_diagnosticPlots[[naming]]$simulated_cellmetadata$metadata
+        
+        cumulative_expression_lst[[naming]][[CT]][[gene]] = data.frame(
+          expression = inflated_counts[gene, ] %>% as.vector %>% unlist,
+          celltype = m$Celltype 
+        ) %>%
+          group_by(celltype) %>%
+          dplyr::summarise(
+            # A cell expresses the gene if count > 0
+            num_expressing = sum(expression > 0),
+            total_cells = n(),
+            pct_expressing = round(100 * (num_expressing / total_cells), 2),
+            indexLR = x["indexLR"]
+          )
+        
+        # -----------------------------------
+        
         tmp_metadata = master_lst_diagnosticPlots[[naming]][["simulated_cellmetadata"]]$metadata
         # create df with counts of inflated and original count matrices
         # since we have CT1 and CT1_signalAdded, use grepl to find both
@@ -215,7 +238,6 @@ for(dataset in datasets)
                                           n_significant = N_genes_CT1CT2_significant)
 }
 
-
 ######################
 ##### Save plots #####
 for(dataset in datasets)
@@ -243,22 +265,10 @@ for(dataset in datasets)
           main = "Amount of Receptors for CT1-CT2 whose cumulative expression is statistically significant for each radius",
           col = "lightblue") %>% print
   
-  # plot amount of cells
-  df_counts = tibble(celltype = master_lst_diagnosticPlots[[1]]$simulated_cellmetadata$metadata$Celltype) %>%
-    dplyr::count(celltype)
-  
-  ggplot(df_counts, aes(celltype, n)) +
-    geom_col() +
-    theme_classic() +
-    scale_y_log10() +
-    ylab("Amount of cells per celltype")
-  
   ggarrange(plotlist = list(cumulative_expression_acrossRadius[[1]]$seed_1, 
                             cumulative_expression_acrossRadius[[2]]$seed_5 , 
                             cumulative_expression_acrossRadius[[3]]$seed_8,
-                            cumulative_expression_acrossRadius[[4]]$seed_15, 
-                            cumulative_expression_acrossRadius[[5]]$seed_12,
-                            cumulative_expression_acrossRadius[[6]]$seed_19))
+                            cumulative_expression_acrossRadius[[4]]$seed_15)) %>% print
   dev.off()
 }
 
@@ -269,32 +279,11 @@ for(dataset in datasets)
 # plot TPR/sensitivity/recall
 statistics_results_lst_recallprecision_plot = list()
 master_lst_precision_recall = list()
-ranking_LRgenes_lst_plot = list()
+
 for(dataset in datasets)
 {
   for(method in methods)
   {
-    # load metric files
-    metrics_files = file.path(path_output_dir,dataset,"metrics/",method) %>%
-      list.files(., pattern = "f1_score")
-    ranking_LRgenes_files = file.path(path_output_dir,dataset,"metrics/",method) %>% 
-      list.files(., pattern = "ranking_LRgenes")
-    
-    for(file in metrics_files)
-    {
-      master_lst_precision_recall[["metrics"]][[file]] = read.table((file.path(path_output_dir,dataset,"metrics/",method,file)), header = TRUE)
-    }
-    
-    # NAs here mean that the LR gene that we inflated is not present in the output of the method
-    for(file in ranking_LRgenes_files)
-    {
-      master_lst_precision_recall[["ranking"]][[file]] = read.table((file.path(path_output_dir,dataset,"metrics/",method,file))) %>% unlist %>% as.numeric
-    }
-    
-    
-    statistics_results_lst_recallprecision_plot[[dataset]][[method]] = do.call(rbind,master_lst_precision_recall[["metrics"]]) %>% as.data.frame
-    ranking_LRgenes_lst_plot[[dataset]][[method]] = do.call(rbind,master_lst_precision_recall[["ranking"]]) %>% as.data.frame
-    
     # Load files for upset plot
     significant_interactions_files = file.path(path_output_dir,dataset,method) %>% 
       list.files(., pattern = "significant_interactions")
@@ -313,96 +302,90 @@ for(dataset in datasets)
     ################################################################################################
     ##### Average the metrics for different indexLR but across same combination of parameters  #####
     
+    statistics_results_lst_recallprecision_plot_non_indexLRaveraged = metric_results %>% lapply(., function(dataset) {
+      # iterate over each method and average metrics of indexLR parameter
+      lapply(dataset, function(method) {
+        tmp_df = method %>% do.call(rbind, .) %>%
+          # Create the new column by removing the suffix
+          # The regex "_indexLR_\\d+$" targets "_indexLR_" and all digits at the end
+          mutate(filename = rownames(.))
+      })
+    })
+    
     # extract rows that have the same parameters besides indexLR and then average the columns. We are averaging results of indexLR
     # generate the grid of parameters used for naming the list to generate output
     # this params_grid is different from previous because before we didnt look at methods and now we have different l_parameters for each method
-    params_grid = expand.grid(FC_nSenderCells = FC_nSenderCells, FC_nReceiverCells = FC_nReceiverCells, l = l_param_index)
-    
-    tmp_lst = list()
-    for(row in 1:nrow(params_grid))
-    {
-      x = params_grid[row,] %>% as.numeric ;  names(x) = c("FC_nSenderCells","FC_nReceiverCells", "l")
-      
-      naming = paste0("FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"],"_l_", x["l"])
-      
-      # extract filenames -> compute mean across columns and save to temporary list
-      filenames = statistics_results_lst_recallprecision_plot[[dataset]][[method]] %>% 
-        rownames() %>% 
-        extract(grepl(naming, .))
-      
-      tmp_lst[[row]] = statistics_results_lst_recallprecision_plot[[dataset]][[method]][filenames,] %>% colMeans()
-      
-      ###########################################################################
-      ##### Calculate % of cells from cellmetadata that we added signal to  #####
-      
-      # we dont care about l parameter nor indexLR as that doesnt affect amount of cells meaning all files in simulated_cellmetadata_file should contain same %
-      # load correct simulated_cellmetadata file depending on the params_grid
-      simulated_cellmetadata_file = simulated_cellmetadata_files %>% extract(grepl(paste0("_FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"]), simulated_cellmetadata_files))
-      
-      y = read_json(file.path(file_path,simulated_cellmetadata_file[1])) %>% convert_json_to_df # take only 1 file -> to speed up computations
-      y = y$metadata
-      # calculate percentage of "CT1_signal_added" and "CT2_signal_added" cells
-      pct_signal_added = y %>% mutate(
-        parent = case_when(
-          Celltype_updated %in% c("CT1", "CT1_signalAdded") ~ "CT1",
-          Celltype_updated %in% c("CT2", "CT2_signalAdded") ~ "CT2"
-        )
-      ) %>%
-        filter(!is.na(parent)) %>% 
-        group_by(parent) %>%
-        summarise(
-          pct_signal_added = round(100 * mean(grepl("signalAdded", Celltype_updated)))
-        ) 
-      
-      # compute mean across indexLR and add % cellsl
-      tmp_lst[[row]] = c(tmp_lst[[row]] , pct_signal_added) %>% unlist
-      names(tmp_lst)[row] = naming
-    }
-    
-    statistics_results_lst_recallprecision_plot[[dataset]][[method]] = do.call(rbind,tmp_lst) %>% as.data.frame
-    statistics_results_lst_recallprecision_plot[[dataset]][[method]] %<>% mutate(FC_nSenderCells = params_grid$FC_nSenderCells, 
-                                                                                 FC_nReceiverCells = params_grid$FC_nReceiverCells,
-                                                                                 l = params_grid$l,
-                                                                                 method = method,
-                                                                                 dataset = dataset)
-    ###############################
-    ##### Ranking of LR genes #####
-    
-    # extract rows that have the same parameters besides indexLR and then average the columns. We are averaging results of indexLR
-    # generate the grid of parameters used for naming the list to generate output
-    tmp_lst = list()
-    
-    for(row in 1:nrow(params_grid))
-    {
-      x = params_grid[row,] %>% as.numeric ;  names(x) = c("FC_nSenderCells","FC_nReceiverCells", "l")
-      
-      naming = paste0("FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"],"_l_", x["l"])
-      
-      # extract filenames -> compute mean across columns and save to temporary list
-      filenames = ranking_LRgenes_lst_plot[[dataset]][[method]] %>% 
-        rownames() %>% 
-        extract(grepl(naming, .))
-      
-      tmp_lst[[row]] = ranking_LRgenes_lst_plot[[dataset]][[method]][filenames,] %>% mean(., na.rm = TRUE)
-      
-      names(tmp_lst)[row] = naming
-    }
-    
-    ranking_LRgenes_lst_plot[[dataset]][[method]] = do.call(rbind,tmp_lst) %>% as.data.frame %>% rename(V1 = "rank")
-    ranking_LRgenes_lst_plot[[dataset]][[method]] %<>% mutate(FC_nSenderCells = params_grid$FC_nSenderCells, 
-                                                              FC_nReceiverCells = params_grid$FC_nReceiverCells,
-                                                                                 l = params_grid$l,
-                                                                                 method = method,
-                                                                                 dataset = dataset)
+    statistics_results_lst_recallprecision_plot = metric_results %>% lapply(., function(dataset) {
+      # iterate over each method and average metrics of indexLR parameter
+      lapply(dataset, function(method) {
+        tmp_df = method %>% do.call(rbind, .) %>%
+          # Create the new column by removing the suffix
+          # The regex "_indexLR_\\d+$" targets "_indexLR_" and all digits at the end
+          mutate(file_without_indexLR = str_remove(rownames(.), "_indexLR_\\d+$")) %>%
+          group_by(file_without_indexLR) %>%
+          # average every numeric column
+          dplyr::summarise(
+            across(
+              everything(), 
+              ~ if(is.numeric(.x)) mean(.x, na.rm = TRUE) else .x[1]
+            ), 
+            .groups = "drop"
+          )
+      })
+    })
   }
-
+  
+  ###########################################################################
+  ##### Calculate % of cells from cellmetadata that we added signal to  #####
+  # we dont care about l_param_index parameter (here we use it for matching with master list) nor indexLR as that doesnt affect amount of cells meaning all files in simulated_cellmetadata_file should contain same %
+  # load correct simulated_cellmetadata file depending on the params_grid
+  
+  params_grid = expand.grid(FC_nSenderCells = FC_nSenderCells, FC_nReceiverCells = FC_nReceiverCells, l_param_index = l_param_index)
+  tmp_lst = list()
+  for(row in 1:nrow(params_grid))
+  {
+    x = params_grid[row,] %>% as.numeric ;  names(x) = c("FC_nSenderCells","FC_nReceiverCells", "l_param_index")
+    
+    naming = paste0("FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"],"_l_", x["l_param_index"])
+    
+    simulated_cellmetadata_file = simulated_cellmetadata_files %>% extract(grepl(paste0("_FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"]), simulated_cellmetadata_files))
+    
+    y = read_json(file.path(file_path,simulated_cellmetadata_file[1])) %>% convert_json_to_df # take only 1 file -> to speed up computations
+    y = y$metadata
+    # calculate percentage of "CT1_signal_added" and "CT2_signal_added" cells
+    pct_signal_added = y %>%
+      filter(Celltype != "Other") %>% 
+      group_by(Celltype) %>%
+      dplyr::summarise(
+        pct_signal_added = round(100 * mean(grepl("signalAdded", Celltype_updated))),
+        amount_signal_added = sum(grepl("signalAdded", Celltype_updated))
+      )
+    
+    tmp_lst[[naming]] = pct_signal_added
+  }
+  # Reorder the vector to match the order of df$match_id
+  # This looks up the values in my_vector based on the ID names in the dataframe
+  reordered_list = tmp_lst[statistics_results_lst_recallprecision_plot[[dataset]][[method]]$file_without_indexLR]
+  
+  # make sure the entire reordered vector has same names as the dataframe column
+  reordered_list_check = reordered_list %>% names %>% is.na
+  stopifnot(!any(reordered_list_check))
+  
   #### Combine all methods together
   # for precision recall plots
-  statistics_results_lst_recallprecision_plot[[dataset]] = do.call(rbind, statistics_results_lst_recallprecision_plot[[dataset]])
-  
-  # for ranking plots
-  ranking_LRgenes_lst_plot[[dataset]] = do.call(rbind, ranking_LRgenes_lst_plot[[dataset]])
-  
+  # add pct_signal_added variable
+  statistics_results_lst_recallprecision_plot[[dataset]] = do.call(rbind, statistics_results_lst_recallprecision_plot[[dataset]]) %>%
+    mutate(pct_CT1cells_expressing_L = 
+             rep(reordered_list %>% do.call(rbind.data.frame,.) %>% filter(Celltype == "CT1") %>% pull(pct_signal_added), length(methods)),
+           N_CT1cells_expressing_L = 
+             rep(reordered_list %>% do.call(rbind.data.frame,.) %>% filter(Celltype == "CT1") %>% pull(amount_signal_added), length(methods))
+    )
+  statistics_results_lst_recallprecision_plot[[dataset]] = statistics_results_lst_recallprecision_plot[[dataset]] %>%
+    mutate(pct_CT2cells_expressing_R = 
+             rep(reordered_list %>% do.call(rbind.data.frame,.) %>% filter(Celltype == "CT2") %>% pull(pct_signal_added), length(methods)),
+           N_CT2cells_expressing_R = 
+             rep(reordered_list %>% do.call(rbind.data.frame,.) %>% filter(Celltype == "CT2") %>% pull(amount_signal_added), length(methods))
+    )
   
   ###########################
   ##### Plot showing FP #####
@@ -411,14 +394,45 @@ for(dataset in datasets)
   FP = ggplot(tmp_df, aes(y = FP, x = method, color = method)) +
     geom_point() +
     scale_y_log10() +
-    ylab("FP")
+    ylab("FP") +
+    ggtitle("Number of FP per method across all combination of parameters")
   
   
   #######################
   ##### UpSet plots #####
   
-  # TODO
-  master_lst_precision_recall$significant_interactions$cellchat
+  interactions_retrieved = lapply(master_lst_precision_recall[["significant_interactions"]] , function(method) {
+    # find all unique elements
+    all_strings = unique(unlist(master_lst_precision_recall$significant_interactions))
+    # For each element in the list, check if the global strings exist there
+    binary_df = as.data.frame(lapply(method, function(x) {
+      as.numeric(all_strings %in% x)
+    }))
+    
+    data.frame(method = ifelse(rowSums(binary_df) > 0, 1,0), row.names = all_strings)
+  }) %>% do.call(cbind,.)
+  
+  colnames(interactions_retrieved) = names(master_lst_precision_recall$significant_interactions)
+  
+  upset = upset(
+    interactions_retrieved, 
+    colnames(interactions_retrieved),
+    base_annotations = list(
+      'Intersection size' = intersection_size(
+        counts = TRUE,
+        mapping = aes(fill = "bars") # You can style the bars here
+      )
+    ),
+    set_sizes = (
+      upset_set_size() + 
+        # Use expand_limits to ensure the axis goes high enough for the labels
+        expand_limits(y = 1500) +
+        geom_text(aes(label = ..count..), hjust = 1.1, stat = 'count') +
+        expand_limits(y = 120)
+    ),
+    themes = upset_default_themes(text = element_text(size = 12),
+                                  legend.position = "none")
+  )
   
   ##########################################
   ##### Generate Precision recall plot #####
@@ -431,7 +445,7 @@ for(dataset in datasets)
   tmp_df2 = statistics_results_lst_recallprecision_plot[[dataset]] %>%
     mutate(ratio_ReceiverSender = (FC_nReceiverCells/FC_nSenderCells) %>% log2)
   
-  p = ggplot(tmp_df2, aes(x = precision, y = recall)) +
+  p1 = ggplot(tmp_df2, aes(x = precision, y = recall)) +
     geom_density_2d(
       aes(fill = after_stat(level)), 
       contour_var = "ndensity",
@@ -447,11 +461,11 @@ for(dataset in datasets)
   
   
   d = tmp_df  %>%
-    group_by(method,l ) %>%
+    group_by(method,l_param_index ) %>%
     summarise_at(vars(f1score), mean) %>%
     mutate(f1score = round(f1score,3))
   
-  heatmap1 = ggplot(d, aes(method, l, fill= f1score)) +
+  heatmap1 = ggplot(d, aes(method, l_param_index, fill= f1score)) +
     geom_tile(color = "black") +
     geom_text(aes(label = f1score), color = "black") +
     scale_fill_gradient(low = "white", high = "red") +
@@ -460,16 +474,34 @@ for(dataset in datasets)
     scale_y_continuous(breaks=l_param_index) +
     ylab("Index of l parameter")
   
-  p1 = ggplot(tmp_df, aes(x = pct_signal_added, y = f1score, color = method)) + 
+  p3 = ggplot(tmp_df, aes(x = pct_CT1cells_expressing_L, y = f1score, color = method)) + 
     geom_point(size = 0.5) +
     geom_smooth(se = FALSE, span = 0.5) +
-    facet_wrap(~ l)+
-    ggtitle("F1score as a function of percentage of cells expressing L/R faceted by L param") 
+    facet_wrap(~ l_param_index)+
+    ggtitle("F1score faceted by L") 
+  
+  p4 = ggplot(tmp_df, aes(x = N_CT1cells_expressing_L, y = f1score, color = method)) + 
+    geom_point(size = 0.5) +
+    geom_smooth(se = FALSE, span = 0.5) +
+    facet_wrap(~ l_param_index)+
+    ggtitle("F1score faceted by L") 
+  
+  p5 = ggplot(tmp_df, aes(x = pct_CT2cells_expressing_R, y = f1score, color = method)) + 
+    geom_point(size = 0.5) +
+    geom_smooth(se = FALSE, span = 0.5) +
+    facet_wrap(~ l_param_index)+
+    ggtitle("F1score faceted by L") 
+  
+  p6 = ggplot(tmp_df, aes(x = N_CT2cells_expressing_R, y = f1score, color = method)) + 
+    geom_point(size = 0.5) +
+    geom_smooth(se = FALSE, span = 0.5) +
+    facet_wrap(~ l_param_index)+
+    ggtitle("F1score L") 
   
   ##########################################
   ##### Generate ranking LR genes plot #####
   
-  tmp_df = ranking_LRgenes_lst_plot[[dataset]] %>% 
+  tmp_df = statistics_results_lst_recallprecision_plot[[dataset]] %>% 
     mutate(rank = round(log10(rank),2))
   
   # generate histogram of number of NaN per method (NaN is when the method doesnt have the simulated ligand-receptor in its output)
@@ -484,150 +516,164 @@ for(dataset in datasets)
       y = "Count",
       title = "Amount of NaN - method didnt find the simulated LR pair"
     ) +
-   scale_y_continuous(breaks = 0:max(d$n_na))
+    scale_y_continuous(breaks = 0:max(d$n_na))
   
   tmp_df2 = tmp_df %>%
     na.omit %>%
-    group_by(method,l) %>%
+    group_by(method,l_param_index) %>%
     summarise_at(vars(rank), list(rank = mean)) %>%
     mutate(rank = round(rank,2))
   
-  # Heatmap of rank according to l radius
-  heatmap2 = ggplot(tmp_df2, aes(method, l, fill= rank)) +
+  # Heatmap of rank according to l_param_index radius
+  heatmap2 = ggplot(tmp_df2, aes(method, l_param_index, fill= rank)) +
     geom_tile(color = "black") +
     geom_text(aes(label = rank), color = "black") +
     scale_fill_gradient(low = "white", high = "red") +
     theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
     ggtitle("rank of how each method retrieves inflated LR")+
     scale_y_continuous(breaks=l_param_index) +
-    ylab("Index of l parameter") + 
+    ylab("Index of l_param_index parameter") + 
     labs(fill = "log10(rank)")
-  
-  
-  ##### Save plots
-  pdf(file.path(path_results_dir ,paste0(dataset, "_recall_precision_plots.pdf")), width = 12, height = 7)
-  p %>% print
-  p1 %>% print
-  heatmap1 %>% print
-  heatmap2 %>% print
-  p2 %>% print
-  FP %>% print
-  
-  ###################################################################
-  ##### summary spider charts across all parameter combinations #####
-  ###################################################################
-  df = statistics_results_lst_recallprecision_plot[[dataset]] %>%
-    group_by(method) %>%
-    summarise_at(vars(precision,recall,f1score), mean) %>%
-    cbind(.,ranking_LRgenes_lst_plot[[dataset]] %>%
-            group_by(method) %>%
-            mutate(log10_rank = round(log10(rank),2)) %>%
-            summarise_at(vars(log10_rank), mean)) %>%
-    tibble::column_to_rownames(., var = "method") %>%
-    select(-method)
-  
-  # To use the fmsb package, I have to add 2 lines to the dataframe: the max and min of each variable to show on the plot!
-  df = rbind(c(0,0,0,0), df) # minimum values
-  df = rbind(c(1,1,1,5), df) # maximum values
-  
-  # Solid line colors (no transparency)
-  line_colors = c(
-    rgb(228, 26, 28, maxColorValue = 255),  # red
-    rgb(55, 126, 184, maxColorValue = 255), # blue
-    rgb(77, 175, 74, maxColorValue = 255),  # green
-    rgb(152, 78, 163, maxColorValue = 255), # purple
-    rgb(255, 127, 0, maxColorValue = 255),  # orange
-    rgb(255, 255, 51, maxColorValue = 255), # yellow
-    rgb(166, 86, 40, maxColorValue = 255)   # brown
-  )
-  
-  # Transparent fill colors (alpha = 80 out of 255)
-  fill_colors = c(
-    rgb(228, 26, 28, alpha = 80, maxColorValue = 255),  # red
-    rgb(55, 126, 184, alpha = 80, maxColorValue = 255), # blue
-    rgb(77, 175, 74, alpha = 80, maxColorValue = 255),  # green
-    rgb(152, 78, 163, alpha = 80, maxColorValue = 255), # purple
-    rgb(255, 127, 0, alpha = 80, maxColorValue = 255),  # orange
-    rgb(255, 255, 51, alpha = 80, maxColorValue = 255), # yellow
-    rgb(166, 86, 40, alpha = 80, maxColorValue = 255)   # brown
-  )
-  
-  
-  radarchart(df,  axistype=1,
-             pcol=line_colors , pfcol=fill_colors , plwd=2 , plty=1,
-             vlcex=1.5 ,cglty=2,cglcol = "#726666",
-             title = paste("Averaged metrics across all combination of parameters for dataset -",dataset ),
-             caxislabels = rep("", 5))
-  # Add a legend
-  legend(x=1.5, y=0.75, legend = rownames(df[c(-1,-2),]), bty = "n", pch = 20,text.col = "black", 
-         col=fill_colors,cex=1.25, pt.cex=4, text.width = 0.1)
-  
-  text(x = c(0.2,0.4,0.6,0.8,1), y = c(-0.05), labels = c(1,2,3,4,5), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.2,-0.4,-0.6,-0.8,-1), y = c(-0.05), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.1), y = c(-0.2,-0.4,-0.6,-0.8,-1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.1), y = c(0.2,0.4,0.6,0.8,1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  
-  ###################################################################
-  ##### summary spider charts across all parameter combinations #####
-  ###################################################################
-  df = statistics_results_lst_recallprecision_plot[[dataset]] %>%
-    group_by(method) %>%
-    summarise_at(vars(precision,recall,f1score), mean) %>%
-    cbind(.,ranking_LRgenes_lst_plot[[dataset]] %>%
-            group_by(method) %>%
-            mutate(log10_rank = round(log10(rank),2)) %>%
-            summarise_at(vars(log10_rank), mean)) %>%
-    tibble::column_to_rownames(., var = "method") %>%
-    select(-method) %>% 
-    t
-  
-  # To use the fmsb package, I have to add 2 lines to the dataframe: the max and min of each variable to show on the plot!
-  df = rbind(c(0,0,0,0,0,0,0), df) # minimum values
-  df = rbind(c(1,1,1,1,1,1,1), df) # maximum values
-  
-  # Solid line colors (no transparency)
-  line_colors = c(
-    rgb(228, 26, 28, maxColorValue = 255)  # red
-  )
-  
-  # Transparent fill colors (alpha = 80 out of 255)
-  fill_colors = c(
-    rgb(228, 26, 28, alpha = 80, maxColorValue = 255)  # red
-  )
-  
-  # PRECISION
-  radarchart(df[c(1,2,3),] %>% as.data.frame,  axistype=1,
-             pcol=line_colors , pfcol=fill_colors , plwd=2 , plty=1,
-             vlcex=1.5 ,cglty=2,cglcol = "#726666",
-             title = paste("Averaged PRECISION across all combination of parameters"),
-             caxislabels = rep("", 5))
-  
-  text(x = c(-0.05), y = c(-0.2,-0.4,-0.6,-0.8,-1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.05), y = c(0.2,0.4,0.6,0.8,1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  
-  # RECALL
-  radarchart(df[c(1,2,4),] %>% as.data.frame,  axistype=1,
-             pcol=line_colors , pfcol=fill_colors , plwd=2 , plty=1,
-             vlcex=1.5 ,cglty=2,cglcol = "#726666",
-             title = paste("Averaged RECALL across all combination of parameters"),
-             caxislabels = rep("", 5))
-  
-  text(x = c(-0.05), y = c(-0.2,-0.4,-0.6,-0.8,-1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.05), y = c(0.2,0.4,0.6,0.8,1), labels = c(0,0.25,0.5,0.75,1), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  
-  # RANK
-  # Change min and max values for rank
-  df[1,] = rep(5)
-  df[2,] = rep(1)
-  
-  radarchart(df[c(1,2,6),] %>% as.data.frame,  axistype=1,
-             pcol=line_colors , pfcol=fill_colors , plwd=2 , plty=1,
-             vlcex=1.5 ,cglty=2,cglcol = "#726666",
-             title = paste("Averaged log10(RANK) across all combination of parameters"),
-             caxislabels = rep("", 5))
-  
-  text(x = c(-0.05), y = c(-0.2,-0.4,-0.6,-0.8,-1), labels = c(1,2,3,4,5), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  text(x = c(-0.05), y = c(0.2,0.4,0.6,0.8,1), labels = c(1,2,3,4,5), col = rgb(0, 0, 1, alpha = 0.5), cex = 1)
-  dev.off()
-  
 }
+
+##########################################################
+##### generate precision/recall plots across indexLR #####
+##########################################################
+# the goal here is to understand how values of recall and precision change depending of ligand/receptor pair (indexLR) that one chooses
+# We are calculating how many cells express ligand/receptor in CT1/CT2 compared to all cells expressing ligand/receptor regardless of celltype
+
+# For the final plot, too many combinations of parameters are used, reduce them here
+n = length(FC_nSenderCells)
+FC_nSenderCells_touse = FC_nSenderCells[unique(c(seq(1, n, by = 2), n))]
+n = length(FC_nReceiverCells)
+FC_nReceiverCells_touse = FC_nReceiverCells[unique(c(seq(1, n, by = 2), n))]
+
+# here we are summarising the data where we merge information of how many cells per celltype and combination of parameters are expressing ligands/receptors 
+# and the f1score/precision/recall scores for further plotting
+lst_data = list()
+for(indexLR in config$indexLR_toSample)
+{
+  # generate a dataframe of cell number statistics for CT1 (expressing ligands)
+  ligands = lapply(cumulative_expression_lst , function(x) {x[["CT1"]] %>% do.call(rbind.data.frame,.) %>%
+      mutate(perc_expressing_ofTotalexpressed = num_expressing/sum(num_expressing)) 
+  }) %>%  
+    do.call(rbind.data.frame,.) %>%
+    tibble::rownames_to_column("filename") %>%
+    mutate(filename = gsub("(_indexLR_).*","",filename)) %>%
+    filter(celltype == "CT1") %>%
+    dplyr::group_by(indexLR,filename) %>%
+    dplyr::summarise(
+      across(where(is.numeric), ~mean(.x, na.rm = TRUE)),           
+      across(where(is.character), ~paste(.x, collapse = ", "))      
+    ) %>% mutate(filename = str_c(filename, "_indexLR_",indexLR))
+  
+  # generate a dataframe of cell number statistics for CT2 (expressing receptors)
+  receptors = lapply(cumulative_expression_lst , function(x) {x[["CT2"]] %>% do.call(rbind.data.frame,.) %>%
+      mutate(perc_expressing_ofTotalexpressed = num_expressing/sum(num_expressing)) 
+  }) %>% 
+    do.call(rbind.data.frame,.) %>%
+    tibble::rownames_to_column("filename") %>%
+    mutate(filename = gsub("(_indexLR_).*","",filename)) %>%
+    filter(celltype == "CT2") %>%
+    dplyr::group_by(indexLR,filename) %>%
+    dplyr::summarise(
+      across(where(is.numeric), ~mean(.x, na.rm = TRUE)),           # Numeric: Mean
+      across(where(is.character), ~paste(.x, collapse = ", "))      # String: Concatenate
+    ) %>% mutate(filename = str_c(filename, "_indexLR_",indexLR))
+  
+  
+  # iterate over every method and add f1score/precision/recall values for each combination of FC parameters
+  for(m in names(statistics_results_lst_recallprecision_plot_non_indexLRaveraged$Visium_HD_HPC))
+  {
+    tmp_df = statistics_results_lst_recallprecision_plot_non_indexLRaveraged$Visium_HD_HPC[[m]] %>%
+      filter(FC_nSenderCells %in% FC_nSenderCells_touse & FC_nReceiverCells %in% FC_nReceiverCells_touse) %>%
+      mutate(filename = str_remove(filename, "_l_\\d+")) %>%
+      dplyr::group_by(filename) %>%
+      dplyr::summarise(
+        across(where(is.numeric), ~mean(.x, na.rm = TRUE)),           # Numeric: Mean
+        across(where(is.character), ~paste(.x, collapse = ", "))      # String: Concatenate
+      )
+    
+    tmp_df2 = left_join(ligands, receptors, by = "filename")
+    tmp_df3 = left_join(tmp_df,tmp_df2 ,by = "filename")
+    colnames(tmp_df3) %<>% gsub("[.]x", "_ligand", .) %>% gsub("[.]y", "_receptor", .)
+
+    lst_data[[m]] = tmp_df3
+  }
+}
+
+# summarise data based on indexLR to calculate mean and standard deviation
+summary_table = lapply(lst_data, function(x) {
+  x %>% 
+    mutate(filename_without_indexLR = str_remove(filename, "_indexLR_\\d+"), indexLR <- as.factor(x$indexLR)) %>%
+    group_by(filename_without_indexLR) %>%
+    dplyr::summarise(
+      mean_precision = mean(precision),
+      sd_precision = sd(precision),
+      mean_recall = mean(recall),
+      sd_recall = sd(recall),
+      perc_expressing_ofTotalexpressed_ligand_overall = mean(perc_expressing_ofTotalexpressed_ligand) %>% round(3),
+      perc_expressing_ofTotalexpressed_receptor_overall = mean(perc_expressing_ofTotalexpressed_receptor %>% round(3))
+    ) %>% ungroup
+})
+
+# combine all methods into a single dataframe
+final_df = bind_rows(summary_table, .id = "method")
+final_df$filename_without_indexLR %<>% gsub("FC_nSenderCells_", "S" ,.) %>% gsub("FC_nReceiverCells_", "R",.) 
+final_df %<>% mutate(filename_with_perc_cells_expressing = str_c("Total_ligand_", round(perc_expressing_ofTotalexpressed_ligand_overall,3),"_",
+                                                                 "Total_receptor_", round(perc_expressing_ofTotalexpressed_receptor_overall,3)))
+
+# Use regex to simplify the filename column for easier plotting
+final_df$filename_without_indexLR <- str_replace(final_df$filename_without_indexLR, "(?<=_R)(\\d+\\.?\\d*)", function(m) {
+  sprintf("%.1f", as.numeric(m))
+}) %>% str_replace(., "(?<=S)(\\d+\\.?\\d*)", function(m) {
+  sprintf("%.1f", as.numeric(m))
+})
+
+indexLR_plot1 = ggplot(final_df, aes(x = filename_without_indexLR, y = mean_precision, color = method)) +
+  geom_errorbar(aes(ymin = mean_precision - sd_precision, 
+                    ymax = mean_precision + sd_precision), 
+                width = 0.2) +
+  geom_point(size = 3) +
+  coord_flip() + # Flip the coordinates to make filenames readable
+  facet_wrap(~method) +
+  theme_bw() +
+  labs(
+    title = "Precision by FC param combination",
+    subtitle = "Error bars represent ±1 Standard Deviation",
+    x = "Filename",
+    y = "Averaged across indexLR precision value"
+  )
+
+indexLR_plot2 = ggplot(final_df, aes(x = filename_without_indexLR, y = mean_recall, color = method)) +
+  geom_errorbar(aes(ymin = mean_recall - sd_recall, 
+                    ymax = mean_recall + sd_recall), 
+                width = 0.2) +
+  geom_point(size = 3) +
+  coord_flip() +
+  facet_wrap(~method) +
+  theme_bw() +
+  labs(
+    title = "Recall by FC param combination",
+    subtitle = "Error bars represent ±1 Standard Deviation",
+    x = "Filename",
+    y = "Averaged across indexLR recall value"
+  )
+
+######################################################
+##### save precision/recall plots across indexLR #####
+######################################################
+pdf(file.path(path_results_dir ,paste0(dataset, "_recall_precision_plots.pdf")), width = 12, height = 7)
+p1 %>% print
+ggarrange(plotlist = list(p3,p4,p5,p6), common.legend = T) %>% print
+heatmap1 %>% print
+heatmap2 %>% print
+p2 %>% print
+FP %>% print
+upset %>% print
+indexLR_plot1 %>% print
+indexLR_plot2 %>% print
+# Generate a clean table describing FC params to real values of how many cells out of all cells in the dataset express ligand/receptor
+knitr::kable(head(final_df) %>% select(filename_without_indexLR, perc_expressing_ofTotalexpressed_ligand_overall,perc_expressing_ofTotalexpressed_receptor_overall)
+             , caption = "FC params to % of all cells in the dataset that express L/R ; averaged across all L/R genes")
+dev.off()

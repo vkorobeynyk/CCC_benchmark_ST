@@ -2,7 +2,6 @@ suppressMessages({
   library(dplyr)
   library(stringr)
   library(magrittr)
-  library(edgeR)
   library(ggpubr)
   library(sf)
   library(jsonlite)
@@ -39,7 +38,6 @@ FC = snakemake@wildcards[["FC"]] %>% as.double
 FC_nSenderCells = snakemake@wildcards[["FC_nSenderCells"]] %>% as.double
 FC_nReceiverCells = snakemake@wildcards[["FC_nReceiverCells"]] %>% as.double
 LR_database_path = snakemake@params[["LR_database"]]
-max_N_neighbors = snakemake@params[["max_N_neighbors"]] %>% as.integer
 #################
 ### Load data ###
 #################
@@ -113,6 +111,10 @@ comb_CT = "CT1_CT2"
 LR_sample = LRdb[indexLR_toSample,]
 simulated_interactions_lst[[comb_CT]]$ligand = LR_sample$ligand
 simulated_interactions_lst[[comb_CT]]$receptor = LR_sample$receptor
+
+### STRATEGY 3 - remove expression of ligand/receptor to see if giotto performance increases
+#counts[strsplit(simulated_interactions_lst$CT1_CT2$ligand, "_") %>% unlist,sample(colnames(counts), size = ncol(counts) * 0.95)] = 0
+#counts[strsplit(simulated_interactions_lst$CT1_CT2$receptor, "_") %>% unlist,sample(colnames(counts), size = ncol(counts) * 0.95)] = 0
 
 ###########################
 # Inflate gene expression #

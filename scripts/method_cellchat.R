@@ -131,13 +131,32 @@ CellChatDB = CellChatDB.human
 # To understand how CellchatDB works, I looked at the example (from LR_database.tsv) of:
 # ligand (L) -> NODAL
 # receptor (R) -> ACVR1B_ACVR2B_CFC1
-# Cellchatdb contains information of subunits and cofactors. When a receptor has multiple subunits, the nomenclature in CellChatDB is R1_R2_R3, just the same as in LR_database.tsv file
-# This means that the nomenclature is LR_database.tsv is the same and compatible with CellChatDB. As the simulation also adds signal to subunits (based on nomenclatiure L1_R1_R2_R3)
-# then I just need to subset CellChatDB to contain the same interaction names.
-# The subunit info splits  the nomenclature(ACVR1B_ACVR2B_CFC1) into 3 subunits (ACVR1B, ACVR2B, CFC1), which means we do not have to change anything there.
-# There are exceptions, like for example when the interaction is "GP complex" or "ACVR1_TGFbR" and it contains subunits that are not present in the name.But this will be filtered anyway.
-# As for the cofactors, as I am not simulating them, I simply remove them from the database
-CellChatDB$interaction = CellChatDB$interaction[which(CellChatDB$interaction$interaction_name %in% LR_database$ligand_receptor),]
+# Cellchatdb contains information of subunits and cofactors. When a receptor has multiple subunits, the nomenclature in CellChatDB is R1_R2_R3.
+# When I generated LR_database.tsv file, I changed position of R1 and R2 as cellphonedb has them changed in the output. Do the same here and
+# switch locations of R1 and R2 to R2_R1
+
+fix_gene_order = function(df) { # fix this here as the results wont match
+  sapply(df, function(x) 
+  {
+    parts = strsplit(x, "_")[[1]]
+    if(length(parts) == 2) {str_c(parts[2] , "_" , parts[1])
+    } else {x}
+  })
+}
+
+LR_database$receptor = fix_gene_order(LR_database$receptor)
+LR_database$ligand = fix_gene_order(LR_database$ligand)
+LR_database$interaction_name  = str_c(LR_database$ligand, "_", LR_database$receptor)
+
+'
+just the same as in LR_database.tsv file
+'
+# cellchatDB is a list with 4 entries:
+# Interactions -> I subset to same ones as LR_database.tsv
+# geneInfo has information of single genes -> not necessary to filter
+# complex -> no need to filter because cellchat just fetches what it needs
+# cofactors I am not simulating -> I simply remove them from the database
+CellChatDB$interaction = CellChatDB$interaction[which(CellChatDB$interaction$interaction_name %in% LR_database$interaction_name),]
 
 stopifnot(nrow(CellChatDB$interaction) == nrow(LR_database))
 

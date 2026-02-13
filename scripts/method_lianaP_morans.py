@@ -34,9 +34,9 @@ with open("config.yaml","r") as stream:
 
 l_index = snakemake.params["l_index"]
 dataset = snakemake.params["dataset"]
-indexLR = int(snakemake.params["indexLR"])
-FC_nReceiverCells = int(snakemake.params["FC_nReceiverCells"])
-FC_nSenderCells = int(snakemake.params["FC_nSenderCells"])
+indexLR = snakemake.params["indexLR"]
+FC_nReceiverCells = snakemake.params["FC_nReceiverCells"]
+FC_nSenderCells = snakemake.params["FC_nSenderCells"]
 LR_database_path = snakemake.params["LR_database"]
 
 l = config["l_param"]["lianaP"][dataset][np.int64(l_index)]
@@ -151,7 +151,7 @@ def plot_gene_spatial(adata, gene, min_expr=0.0, figsize=(6, 6)):
 n = len(LRdata_df) -1
 genes = [LRdata_df["ligand_receptor"][n].split("_")[0], LRdata_df["ligand_receptor"][n].split("_")[1], 
          LRdata_df["ligand_receptor"][0].split("_")[0], LRdata_df["ligand_receptor"][0].split("_")[1]]
-if FC_nReceiverCells == 1 & FC_nSenderCells == 1 & indexLR == 1:
+if FC_nReceiverCells == 0.4 and FC_nSenderCells == 0.4 and indexLR == 1:
   with PdfPages("output/" + dataset + "/lianaP_morans/plot_spatialDistribution_LR.pdf") as pdf:
     for gene in genes:
         # Create the plot
