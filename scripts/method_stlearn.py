@@ -140,10 +140,10 @@ LRdata_df = LRdata_df.sort_values("statistics") # sort importance column on asce
 
 CT1 = cm.loc[cm["Celltype"] == "CT1",]["Cell_ID"].tolist()
 CT2 = cm.loc[cm["Celltype"] == "CT2",]["Cell_ID"].tolist()
-CT1_signalAdded = cm.loc[cm["Celltype_updated"] == "CT1_signalAdded",]["Cell_ID"].tolist()
-CT2_signalAdded = cm.loc[cm["Celltype_updated"] == "CT2_signalAdded",]["Cell_ID"].tolist()
+all_sender_cells = cm.loc[cm["Celltype_updated"] == "CT1_signalAdded",]["Cell_ID"].tolist()
+all_receiver_cells = cm.loc[cm["Celltype_updated"] == "CT2_signalAdded",]["Cell_ID"].tolist()
 # get all cells that method "sees"
-cells_seen_by_method = [item for sublist in adata.obsm["spot_neigh_bcs"]["neighbour_bcs"][CT1_signalAdded] for item in sublist.split(",") if item != ""]
+cells_seen_by_method = [item for sublist in adata.obsm["spot_neigh_bcs"]["neighbour_bcs"][all_sender_cells] for item in sublist.split(",") if item != ""]
 cells_seen_by_method = list(set(cells_seen_by_method) - set(CT1)) # subtract CT1 cells
 
 plt.scatter(cm.loc[:,"x"], cm.loc[:,"y"], 
@@ -152,9 +152,9 @@ plt.scatter(cm.loc[cm["Cell_ID"].isin(CT1),"x"], cm.loc[cm["Cell_ID"].isin(CT1),
             c= "#FFCCFF", s = 8)
 plt.scatter(cm.loc[cm["Cell_ID"].isin(cells_seen_by_method),"x"], cm.loc[cm["Cell_ID"].isin(cells_seen_by_method),"y"], 
             c= "orange", s = 8)
-plt.scatter(cm.loc[cm["Cell_ID"].isin(CT1_signalAdded),"x"], cm.loc[cm["Cell_ID"].isin(CT1_signalAdded),"y"], 
+plt.scatter(cm.loc[cm["Cell_ID"].isin(all_sender_cells),"x"], cm.loc[cm["Cell_ID"].isin(all_sender_cells),"y"], 
             c= "#990099", s = 12)
-plt.scatter(cm.loc[cm["Cell_ID"].isin(CT2_signalAdded),"x"], cm.loc[cm["Cell_ID"].isin(CT2_signalAdded),"y"], 
+plt.scatter(cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"x"], cm.loc[cm["Cell_ID"].isin(all_receiver_cells),"y"], 
             c= "#0000FF", s = 12)
 plt.xlabel("x_coord_um")
 plt.ylabel("y_coord_um")
@@ -163,4 +163,27 @@ plt.title("purple - sender cells | blue - receiver cells | orange - cells seen b
             
 plt.savefig(plot_neighbors_path, dpi = 200) 
 
+# how many CT2 cells are seen by method
+amount_CT2_seen_byMethod = len(set(cells_seen_by_method).intersection(set(all_receiver_cells)))
+
+# FCsender > FCreceiver -> how many receivers are seen by method?
+# FCsender < FCreceiver -> do all senders see 1 receiver?
+# FCsender == FCreceiver -> are all receiver seen by CT1 and method
+if amount_CT2_seen_byMethod != 0:
+    if len(all_sender_cells) > len(all_receiver_cells):
+        LRdata_df["ratio_CT2_seen_byMethod"] = amount_CT2_seen_byMethod / len(all_receiver_cells) * 100
+    elif len(all_sender_cells) < len(all_receiver_cells):
+        LRdata_df["ratio_CT2_seen_byMethod"] = len(all_sender_cells) / amount_CT2_seen_byMethod * 100
+        # if there are more than 1 receiver per sender
+        #if amount_CT2_seen_byMethod > len(all_sender_cells):
+        #    ratio_CT2_seen_byMethod = 100
+    elif len(all_sender_cells) == len(all_receiver_cells):
+        LRdata_df["ratio_CT2_seen_byMethod"] = amount_CT2_seen_byMethod / len(all_receiver_cells) * 100
+else:
+    LRdata_df["ratio_CT2_seen_byMethod"] = 0
+
+
+# average cells that each CT1 has that are seen by method
+LRdata_df["average_cells_perCT1_seen_byMethod"] = len(cells_seen_by_method) / len(all_sender_cells)
+        
 LRdata_df.to_csv(significant_interactions_path, sep = "\t")

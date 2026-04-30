@@ -50,8 +50,8 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_FC_nSenderCells_3_FC_nReceiverCells_3_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB/simulated_cellmetadata_FC_1_FC_nSenderCells_3_FC_nReceiverCells_3_indexLR_1.json")
+inflated_counts = read.csv("output/MERFISH_mColon_semiSimulation_NB/inflated_normalized_counts_FC_1_FC_nSenderCells_2_FC_nReceiverCells_9_indexLR_2.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/MERFISH_mColon_semiSimulation_NB/simulated_cellmetadata_FC_1_FC_nSenderCells_2_FC_nReceiverCells_9_indexLR_2.json")
 '
 
 # transform json list to individual dataframe
@@ -108,6 +108,31 @@ plt = ggplot(coord, aes(x = x ,y = y)) +
 
 ggsave(plot_neighbors_path, plt, device = "png", width = 30, height = 25, units = "cm")
 
+
+#########################################
+# How many CT2 cells are seen by method #
+#########################################
+amount_CT1_signalAdded_cells = cellmetadata$metadata %>% filter(Celltype_updated == "CT1_signalAdded") %>% nrow
+amount_CT2_signalAdded_cells = cellmetadata$metadata %>% filter(Celltype_updated == "CT2_signalAdded") %>% nrow
+amount_CT2_seen_byMethod = which(all_cells_seen_byMethod %in% (cellmetadata$metadata %>% filter(Celltype_updated == "CT2_signalAdded") %>% pull(Cell_ID))) %>% length
+
+# FCsender > FCreceiver -> how many receivers are seen by method?
+# FCsender < FCreceiver -> do all senders see 1 receiver?
+# FCsender == FCreceiver -> are all receiver seen by CT1 and method
+if(amount_CT2_seen_byMethod != 0) {
+  if (amount_CT1_signalAdded_cells > amount_CT2_signalAdded_cells) {
+    ratio_CT2_seen_byMethod = amount_CT2_seen_byMethod / amount_CT2_signalAdded_cells * 100
+  } else if (amount_CT1_signalAdded_cells < amount_CT2_signalAdded_cells) {
+    ratio_CT2_seen_byMethod = amount_CT1_signalAdded_cells / amount_CT2_seen_byMethod * 100
+  } else if (amount_CT1_signalAdded_cells == amount_CT2_signalAdded_cells) {
+    ratio_CT2_seen_byMethod = amount_CT2_seen_byMethod / amount_CT2_signalAdded_cells * 100
+  }
+} else {ratio_CT2_seen_byMethod = 0}
+
+
+# average cells that each CT1 has that are seen by method
+average_cells_perCT1_seen_byMethod = length(all_cells_seen_byMethod) / amount_CT1_signalAdded_cells
+
 # Add metadata variables to SO
 SO@meta.data %<>% mutate(Celltype = cellmetadata$metadata$Celltype,
                          x = coord$x,
@@ -136,9 +161,20 @@ niche_CtN = NICHES_output[['CellToCellSpatial']]
 # Perform wilcoxon test
 markers_CtN = FindAllMarkers(niche_CtN, test.use = "wilcox") %>% filter(cluster == "CT1—CT2")
 
-markers_CtN %<>% mutate(ligand_receptor = gsub("—","_",gene),
+markers_CtN %<>% mutate(ligand_receptor = gsub("—|-","_",gene),
                         significant = markers_CtN$p_val_adj < 0.05,
                         statistics = p_val_adj) %>% 
   arrange(p_val_adj)
+
 # save data
-write.table(markers_CtN ,significant_interactions_path)
+if(nrow(markers_CtN) != 0)
+{
+  markers_CtN$ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod
+  markers_CtN$average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod
+  write.table(markers_CtN ,significant_interactions_path)
+} else {
+  write.table(data.frame(ligand_receptor = NA , significant = FALSE, statistics = 0, 
+                         ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod,
+                         average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path)
+}
+

@@ -39,7 +39,7 @@ FC_nReceiverCells = snakemake.params["FC_nReceiverCells"]
 FC_nSenderCells = snakemake.params["FC_nSenderCells"]
 LR_database_path = snakemake.params["LR_database"]
 
-l = config["l_param"]["lianaP"][dataset][np.int64(l_index)]
+l = config["l_param"]["moransI"][dataset][np.int64(l_index)]
 #adata = sc.AnnData(pd.read_csv("output/MERFISH_mColon_semiSimulation_NB/inflated_normalized_counts_FC_1_n_neigbors_2_indexLR_1.tsv", sep="\t").T)
 #cellmetadata_path = "output/STARmap_plus_HPC_semiSimulation_NB/simulated_cellmetadata_1_n_neigbors_4.json"
 
@@ -73,6 +73,28 @@ plt.title("purple - sender cells | blue - receiver cells | orange - cells seen b
             
 plt.savefig(plot_neighbors_path, dpi = 200) 
 
+# how many CT2 cells are seen by method
+amount_CT2_seen_byMethod = (cm[cm["Cell_ID"].isin(all_receiver_cells)]["spatial_connectivities"]!= 0).sum() 
+
+# FCsender > FCreceiver -> how many receivers are seen by method?
+# FCsender < FCreceiver -> do all senders see 1 receiver?
+# FCsender == FCreceiver -> are all receiver seen by CT1 and method
+if amount_CT2_seen_byMethod != 0:
+    if len(all_sender_cells) > len(all_receiver_cells):
+        ratio_CT2_seen_byMethod = amount_CT2_seen_byMethod / len(all_receiver_cells) * 100
+    elif len(all_sender_cells) < len(all_receiver_cells):
+        ratio_CT2_seen_byMethod = len(all_sender_cells) / amount_CT2_seen_byMethod * 100
+        # if there are more than 1 receiver per sender
+        #if amount_CT2_seen_byMethod > len(all_sender_cells):
+        #    ratio_CT2_seen_byMethod = 100
+    elif len(all_sender_cells) == len(all_receiver_cells):
+        ratio_CT2_seen_byMethod = amount_CT2_seen_byMethod / len(all_receiver_cells) * 100
+else:
+    ratio_CT2_seen_byMethod = 0
+    
+# average cells that each CT1 has that are seen by method
+average_cells_perCT1_seen_byMethod = (cm["spatial_connectivities"]!=0).sum() / len(all_sender_cells)
+
 # get LR database
 LR_database = pd.read_csv(LR_database_path, sep=" ")
 
@@ -98,6 +120,9 @@ LRdata_df["significant"] = LRdata_df["morans_pvals"] < 0.05
 LRdata_df = LRdata_df.rename({"morans_pvals":"statistics"},axis=1)
 LRdata_df = LRdata_df.sort_values("statistics") # sort importance column on ascending order
 LRdata_df["ligand_receptor"] = LRdata_df["ligand"] + "_" + LRdata_df["receptor"]
+LRdata_df["ratio_CT2_seen_byMethod"] = ratio_CT2_seen_byMethod
+LRdata_df["average_cells_perCT1_seen_byMethod"] = average_cells_perCT1_seen_byMethod
+
 LRdata_df.to_csv(significant_interactions_path, sep = "\t")
 
 ############################################################

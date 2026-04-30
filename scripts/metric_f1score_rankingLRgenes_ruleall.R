@@ -14,7 +14,7 @@ if (is.null(snakemake@input[["significant_interactions"]]) |  is.null(snakemake@
 path_final_scores = snakemake@output[["final_scores"]]
 
 # INPUT FILES
-path_significant_interactions = snakemake@input[["significant_interactions"]] # not used
+path_significant_interactions = snakemake@input[["significant_interactions"]] # not used in the script but only in Snakefile
 
 ##########
 # PARAMS #
@@ -126,13 +126,16 @@ for(dataset in datasets)
         f1score = 2 * precision * recall / (precision + recall) %>% round(3)
         if(is.nan(f1score)) {f1score = 0}
         
+
         # Create df to store average results
         df_statistics = data.frame(precision = precision %>% round(3), recall = recall %>% round(3), f1score = f1score %>% round(3), 
                                    TP = TP, FN = FN, FP = FP, rank = rank, 
                                    method = method, indexLR = indexLR,
                                    FC_nSenderCells = x["FC_nSenderCells"], 
                                    FC_nReceiverCells = x["FC_nReceiverCells"], 
-                                   l_param_index = x["l_param_index"])
+                                   l_param_index = x["l_param_index"],
+                                   ratio_CT2_seen_byMethod = unique(all_interactions$ratio_CT2_seen_byMethod),
+                                   average_cells_perCT1_seen_byMethod = unique(all_interactions$average_cells_perCT1_seen_byMethod))
         
         # print all scores
         print(paste("precision:", df_statistics$precision, "recall:" ,df_statistics$recall, "f1score:", df_statistics$f1score ))

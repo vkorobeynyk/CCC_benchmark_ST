@@ -43,8 +43,8 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_1_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB//simulated_cellmetadata_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_1_indexLR_1.json")
+inflated_counts = read.csv("output/MERFISH_mColon_semiSimulation_NB/inflated_normalized_counts_FC_1_FC_nSenderCells_4_FC_nReceiverCells_9_indexLR_1.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/MERFISH_mColon_semiSimulation_NB/simulated_cellmetadata_FC_1_FC_nSenderCells_4_FC_nReceiverCells_9_indexLR_1.json")
 LR_database = read.table("data/LR_database.tsv", row.names = 1)
 '
 
@@ -62,16 +62,15 @@ SO_obj@assays$RNA$data = inflated_counts
 
 # Filter LR_database and Seurat object to only contain common ligand receptor genes
 # Transform LR database from L-R1-R2 to L-R1 | L-R2
-lst = apply(LR_database, 1, as.list)
+lst = split(LR_database, seq_len(nrow(LR_database)))
 
 LR_database = lapply(lst, function(x) {
   grid = x[c("ligand","receptor")] %>%
     str_split(.,"_") %>%
     expand.grid() %>%
-    mutate(ligand_receptor = x$ligand_receptor) %>%
-    dplyr::rename(ligand = Var1,
-           receptor = Var2,)
+    mutate(ligand_receptor = x$ligand_receptor) 
   
+  #colnames(grid)[1:2] = c("ligand","receptor")
   all_present = (grid %>% select("ligand","receptor") %>% unlist ) %in% rownames(SO_obj) %>%
     all
   
@@ -94,68 +93,78 @@ SO_obj = SO_obj[c(LR_database$ligand,LR_database$receptor) %>% unique %>% as.cha
 # some genes wont be present in output because of min.cells.feature/min.cells.group parameters
 # Perform differential expression to find ligands that are overexpressed in CT1
 Idents(SO_obj) = SO_obj$Celltype
-markers = FindAllMarkers(SO_obj, slot = "data" , test.use = "wilcox")
-markers_ligands = markers %>% filter(cluster == "CT1") %>% filter(avg_log2FC > 0)
-# Perform differential expression to find receptors that are overexpressed in CT2
-markers_receptors = markers %>% filter(cluster == "CT2") %>% filter(avg_log2FC > 0)
+markers = FindAllMarkers(SO_obj, slot = "data", test.use = "wilcox")
 
-# Average the results for cases like L-R1-R2 (aggregating L-R1 and L-R2)
+# Initialize as empty dataframes with correct column names if no markers are found
+if (nrow(markers) == 0) {
+  markers_ligands = markers
+  markers_receptors = markers
+} else {
+  markers_ligands = markers %>% filter(cluster == "CT1") %>% filter(avg_log2FC > 0)
+  markers_receptors = markers %>% filter(cluster == "CT2") %>% filter(avg_log2FC > 0)
+}
+
 seurat_LRR_averaged_out = list()
-for(entry in unique(LR_database$ligand_receptor))
-{
-  name = str_split(entry,"_") %>% 
-    unlist
-  
-  ligand = name[1] # 1st entry is alwasy ligand
-  if(length(name) == 2) {
-    receptor = name[2]
-    
-    # Average over the results
-    markers_ligands_subset = markers_ligands %>% filter(gene %in% ligand)
-    markers_receptors_subset = markers_receptors %>% filter(gene %in% receptor)
-    
-    # if at least one of the genes in "name" is not present in the output, then the aggregated result doesnt exist
-    if(nrow(markers_ligands_subset) != 1 | nrow(markers_receptors_subset) != 1) {next}
-    
-    tmp_markers = rbind(markers_ligands_subset, markers_receptors_subset)
-    averaged_results = tmp_markers %>%
-      summarise(
-        across(where(is.character), ~ first(.)),
-        across(where(is.factor), ~ first(.)), 
-        across(where(is.numeric), ~ mean(., na.rm = TRUE)))
-    
-    seurat_LRR_averaged_out[[entry]] = averaged_results
-    
-  } else if (length(name) == 3){
-    receptor = c(name[2], name[3])
-    
-    # Average over the results
-    markers_ligands_subset = markers_ligands %>% filter(gene %in% ligand)
-    markers_receptors_subset = markers_receptors %>% filter(gene %in% receptor)
-    
-    # if at least one of the genes in "name" is not present in the output, then the aggregated result doesnt exist
-    if(nrow(markers_ligands_subset) != 1 | nrow(markers_receptors_subset) != 2) {next}
-    
-    tmp_markers = rbind(markers_ligands_subset, markers_receptors_subset)
-    averaged_results = tmp_markers %>%
-      summarise(
-        across(where(is.character), ~ first(.)),
-        across(where(is.factor), ~ first(.)), 
-        across(where(is.numeric), ~ mean(., na.rm = TRUE)))
-    
-    seurat_LRR_averaged_out[[entry]] = averaged_results
-    
-  } else {message("seurat_wilcoxon analysis complex with more than 2 receptors") ; break}
-    
- 
-} 
-seurat_LRR_averaged_out = do.call(rbind.data.frame,seurat_LRR_averaged_out) %>%
-  mutate(ligand_receptor = rownames(.),
-         significant = p_val_adj < 0.05,
-         statistics = p_val_adj) %>%
-  select(p_val, p_val_adj , ligand_receptor,significant,statistics) %>% # drop the log2fc and pct columns as they dont reflect reality
-  arrange(statistics) # sort from lower to higher pvalues
 
+# Process L-R Database
+if (nrow(markers_ligands) > 0 & nrow(markers_receptors) > 0) {
+  
+  for(entry in unique(LR_database$ligand_receptor)) {
+    name = unlist(str_split(entry, "_"))
+    ligand = name[1]
+    
+    # Handle cases for 1 or 2 receptors (L_R or L_R1_R2)
+    if(length(name) %in% c(2, 3)) {
+      receptors = name[2:length(name)]
+      
+      # Subset markers for the specific pair
+      subset_L = markers_ligands %>% filter(gene == ligand)
+      subset_R = markers_receptors %>% filter(gene %in% receptors)
+      
+      # Check if ALL components are found
+      # (Ligand must be 1, Receptors must match the count in the database string)
+      if(nrow(subset_L) == 1 && nrow(subset_R) == (length(name) - 1)) {
+        
+        tmp_markers = rbind(subset_L, subset_R)
+        
+        averaged_results = tmp_markers %>%
+          dplyr::summarise(
+            across(where(is.character), ~ data.table::first(.)),
+            across(where(is.factor), ~ data.table::first(.)), 
+            across(where(is.numeric), ~ mean(., na.rm = TRUE))
+          )
+        
+        seurat_LRR_averaged_out[[entry]] = averaged_results
+      }
+    } else {
+      message(paste("Skipping complex pair:", entry))
+    }
+  }
+}
+
+if(length(seurat_LRR_averaged_out) > 0) {
+  seurat_LRR_averaged_out = do.call(rbind.data.frame, seurat_LRR_averaged_out) %>%
+    mutate(
+      ligand_receptor = rownames(.),
+      significant = p_val_adj < 0.05,
+      statistics = p_val_adj
+    ) %>%
+    select(p_val, p_val_adj, ligand_receptor, significant, statistics) %>%
+    arrange(statistics)
+} else {
+  # Default output if no L-R pairs were significantly co-expressed
+  seurat_LRR_averaged_out = data.frame(
+    p_val = 1, 
+    p_val_adj = 1, 
+    ligand_receptor = "none_detected", 
+    significant = FALSE, 
+    statistics = 1
+  )
+}
+
+# Metadata columns
+seurat_LRR_averaged_out$ratio_CT2_seen_byMethod = 100
+seurat_LRR_averaged_out$average_cells_perCT1_seen_byMethod = FALSE
 
 # save data
 write.table(seurat_LRR_averaged_out ,significant_interactions_path)

@@ -13,6 +13,7 @@ if (is.null(snakemake@input[["processed_counts"]]) | is.null(snakemake@input[["g
     is.null(snakemake@input[["cellmetadata"]])){
   stop("Argument_name needs to be specified, but is missing.n", call.=FALSE)
 }
+
 #############
 ### INPUT ###
 #############
@@ -48,10 +49,10 @@ means_perCT = genemetadata$mean
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-counts = read.table("data/processed/Visium_HD_HPC/processed_counts_Visium_HD_HPC.tsv")
-genemetadata = readRDS("data/processed/Visium_HD_HPC/genemetadata_Visium_HD_HPC.RDS")
+counts = read.table("data/processed/CosMx_HFC/processed_counts_CosMx_HFC.tsv")
+genemetadata = readRDS("data/processed/CosMx_HFC/genemetadata_CosMx_HFC.RDS")
 means_perCT = genemetadata$mean
-cellmetadata = read_json("data/processed/Visium_HD_HPC/cellmetadata_Visium_HD_HPC.json")
+cellmetadata = read_json("data/processed/CosMx_HFC/cellmetadata_CosMx_HFC.json")
 LRdb = read.table("data/LR_database.tsv", header = T)
 '
 
@@ -124,6 +125,10 @@ simulated_interactions_lst[[comb_CT]]$receptor = LR_sample$receptor
 fraction_cells_expressingR = FC_nReceiverCells * cellmetadata$average_percentageCells_expressingLR
 fraction_cells_expressingL = FC_nSenderCells * cellmetadata$average_percentageCells_expressingLR
 
+# if the vars are above 1, we are trying to sample more cells than available
+# decrease FC_nReceiverCells or FC_nSenderCells
+stopifnot(fraction_cells_expressingR < 1 & fraction_cells_expressingL < 1)
+
 # Semi simulation
 # Subunits are also simulated because the LR database nomenclature is L_R1_R2 etc
 semi_simulation_out = semi_simulate(counts = counts, simulated_interactions_lst = simulated_interactions_lst , genemetadata = genemetadata, 
@@ -148,6 +153,17 @@ p = ggplot(cellmetadata$metadata, aes(x = x, y = y,color = Celltype_updated, siz
   theme_bw()
 
 ggsave(filename = plot_neighbors_path, plot = p, width = 200, height = 150, units = "mm")
+
+
+# Calculate relative amount of L preesent in non CT1 celltypes and R in non CT2 celltypes
+subset_inflated_counts_L = semi_simulation_out$counts_inflated[LR_sample$ligand %>% str_split("_") %>% unlist,
+                                    cellmetadata$metadata %>% filter(Celltype != "CT1") %>% pull(Cell_ID)] > 0
+
+subset_inflated_counts_R = semi_simulation_out$counts_inflated[LR_sample$receptor %>% str_split("_") %>% unlist,
+                                                                    cellmetadata$metadata %>% filter(Celltype != "CT2") %>% pull(Cell_ID)] > 0
+
+cellmetadata$N_Other_CT2_cells_expressing_ligand = rowSums(subset_inflated_counts_L)
+cellmetadata$N_Other_CT1_cells_expressing_receptor = rowSums(subset_inflated_counts_R) %>% mean
 
 ################
 # save results #

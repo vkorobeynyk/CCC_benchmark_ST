@@ -1,11 +1,11 @@
 # Datasets to use for the benchmark
-datasets: ["Visium_HD_HPC"] #, "MERFISH_mColon" , "Slideseq2_HPC" ,"CosMx_HFC"] #, "STARmap_plus_HPC"]
+datasets: ["MERFISH_mColon", "CosMx_HFC"  , "Visium_HD_HPC"] # "Slideseq2_HPC"  , "STARmap_plus_HPC"]
 
 # To add signal to cells, I only consider the closest neighbor
 semiSimulation:
     FC: [1] # Fold change parameter. Is used to multiply the estimated mean in the NB sampling. Currently not used as spatial transcriptomics data is very sparse by default
-    FC_nSenderCells: [0.2,0.5,0.8,1,1.2,1.6,2,2.5] # FC of Sender cells whose ligand expression will be added. Fraction of cells is calculated average_percentageCells_expressingLR * FC_nSenderCells * Number of sending cells
-    FC_nReceiverCells: [0.2,0.5,0.8,1,1.2,1.6,2,2.5] # FC of Receiver cells whose receptor expression will be added. Number of cells is calculated average_percentageCells_expressingLR * FC_nReceiverCells * Number of receiver cells
+    FC_nSenderCells: [0.5,2,4,6,9] # ,0.8,1,1.2,1.6,2,2.5] # FC of Sender cells whose ligand expression will be added. Fraction of cells is calculated average_percentageCells_expressingLR * FC_nSenderCells * Number of sending cells | for MERFISH below 0.3 gives error
+    FC_nReceiverCells: [0.5,2,4,6,9] # FC of Receiver cells whose receptor expression will be added. Number of cells is calculated average_percentageCells_expressingLR * FC_nReceiverCells * Number of receiver cells | for MERFISH below 0.3 gives error
 
 # Ligand-receptor database to use -> comes from liana. More info can be found in data/InfoAbout_LR_database file
 LR_database: "data/LR_database.tsv"
@@ -13,44 +13,49 @@ LR_database: "data/LR_database.tsv"
 # Index of ligand receptor pairs to inflate expression
 # We are simulating LR pairs separately because the spatial transcriptomics data is already sparse and we dont want to change data properties by simulating many LR pairs at the same time
 # the results of different indexLR are aggregated
-indexLR_toSample: [1,2,3,4] #,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50]
+indexLR_toSample: [1,2] #,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50]
 
 # Methods to use in the benchmark
-methods: ["cellchat" , "NICHES", "lianaP_morans", "mistyR" ,"cellphonedb", "seurat_wilcoxon","stlearn"] # "lianaP_lee" , "giotto
+methods: ["cellchat" ,"cellphonedb", "seurat_wilcoxon", "NICHES", "lianaP_morans", "mistyR" ,"stlearn"] # "lianaP_lee" , "giotto ,,
 
-l_param_index: [0,2] # index to subset python dict -> this indicates how many different l parameteres we want to test
+l_param_index: [0,1,2,3] # index to subset python dict -> this indicates how many different l parameteres we want to test
 
 # Methods have a way to compute distances around cells of interest. THis can be euclidean distance, gaussian kernel, rbf kernel etc... l_param represents distances
-# Unfortunately the distances are different depending on the method
 l_param:
-  lianaP:
-    STARmap_plus_HPC: [300,500,700]
-    CosMx_HFC: [100,200,300]
-    Slideseq2_HPC: [40,60,80] 
-    MERFISH_mColon: [20,40,60]
-    Visium_HD_HPC: [100,200,300]
+  moransI:
+    STARmap_plus_HPC: [200,500,800]
+    CosMx_HFC: [55,115,160,250]
+    Slideseq2_HPC: [30,60,90] 
+    MERFISH_mColon: [16,35,46,68]
+    Visium_HD_HPC: [55,95,115,155]
+  mistyR:
+    STARmap_plus_HPC: [200,500,800]
+    CosMx_HFC: [45,85,110,160]
+    Slideseq2_HPC: [30,60,90] 
+    MERFISH_mColon: [13,25,33,49]
+    Visium_HD_HPC: [45,65,85,125]
   NICHES:
-    STARmap_plus_HPC: [300,500,700]
-    CosMx_HFC: [100,200,300]
-    Slideseq2_HPC: [40,60,80] 
-    MERFISH_mColon: [20,40,60]
-    Visium_HD_HPC: [100,200,300]
+    STARmap_plus_HPC: [200,500,800]
+    CosMx_HFC: [150,250,350,550]
+    Slideseq2_HPC: [30,60,90] 
+    MERFISH_mColon: [40,75,100,150]
+    Visium_HD_HPC: [150,200,250,350]
   CellChat:
-    STARmap_plus_HPC: [300,500,700]
-    CosMx_HFC: [100,200,300]
-    Slideseq2_HPC: [40,60,80] 
-    MERFISH_mColon: [20,40,60]
-    Visium_HD_HPC: [100,200,300]
+    STARmap_plus_HPC: [200,500,800]
+    CosMx_HFC: [150,250,350,550]
+    Slideseq2_HPC: [30,60,90] 
+    MERFISH_mColon: [40,75,100,150]
+    Visium_HD_HPC: [150,200,250,350]
   giotto:
     STARmap_plus_HPC: [300,500,700]
-    CosMx_HFC: [100,200,300]
+    CosMx_HFC: [150,200,250]
     Slideseq2_HPC: [40,60,80] 
-    MERFISH_mColon: [20,40,60]
-    Visium_HD_HPC: [100,200,300]
+    MERFISH_mColon: [40,75,100]
+    Visium_HD_HPC: [150,200,250]
   stlearn:
-    STARmap_plus_HPC: [300,500,700]
-    CosMx_HFC: [100,200,300]
-    Slideseq2_HPC: [40,60,80] 
-    MERFISH_mColon: [20,40,60]
-    Visium_HD_HPC: [100,200,300]
+    STARmap_plus_HPC: [200,500,800]
+    CosMx_HFC: [150,250,350,550]
+    Slideseq2_HPC: [30,60,90] 
+    MERFISH_mColon: [40,75,100,150]
+    Visium_HD_HPC: [150,200,250,350]
     

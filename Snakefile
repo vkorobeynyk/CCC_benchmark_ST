@@ -15,7 +15,7 @@ rule all:
 rule run_processing:
     threads: 1
     resources:
-        mem_mb=20000
+        mem_mb=25000
     input:
         counts="data/{dataset}/counts_{dataset}.tsv",
         metadata="data/{dataset}/metadata_{dataset}.tsv"
@@ -24,9 +24,12 @@ rule run_processing:
         genemetadata="data/processed/{dataset}/genemetadata_{dataset}.RDS",
         cellmetadata="data/processed/{dataset}/cellmetadata_{dataset}.json",
         plot_allneighbors="data/processed/{dataset}/plot_allneighbors_{dataset}.pdf",
+        plot_radius="data/processed/{dataset}/plot_allradius_{dataset}.pdf",
+        plot_CT1CT2distance="data/processed/{dataset}/plot_CT1CT2distance_{dataset}.pdf",
         diagnostic_plots="data/processed/{dataset}/diagnostic_plots_{dataset}.pdf"
     params:
-      LR_database=config["LR_database"]
+      LR_database=config["LR_database"],
+      dataset="{dataset}"
     container:
         "sing_container/liana_edgeR.sif"
     script:
@@ -36,7 +39,7 @@ rule run_processing:
 rule run_semiSimulation_inflateCounts:
     threads: 1
     resources:
-        mem_mb=10000
+        mem_mb=15000
     input:
         processed_counts="data/processed/{dataset}/processed_counts_{dataset}.tsv",
         genemetadata="data/processed/{dataset}/genemetadata_{dataset}.RDS",
@@ -59,7 +62,7 @@ rule run_semiSimulation_inflateCounts:
 rule run_normalization:
     threads: 1
     resources:
-        mem_mb=10000
+        mem_mb=15000
     input:
         inflated_counts="output/{dataset}_semiSimulation_NB/inflated_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv"
     output:
@@ -74,7 +77,7 @@ rule run_normalization:
 rule run_method_cellphonedb:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         microenvironment="data/cpdbv5_extrafiles/microenvironment.tsv",
@@ -90,7 +93,7 @@ rule run_method_cellphonedb:
 rule run_method_lianaP_morans:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
@@ -112,7 +115,7 @@ rule run_method_lianaP_morans:
 rule run_method_spatialdm:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
@@ -132,7 +135,7 @@ rule run_method_spatialdm:
 rule run_method_mistyR:
     threads: 2
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
@@ -151,7 +154,7 @@ rule run_method_mistyR:
 rule run_method_NICHES:
     threads: 1
     resources:
-        mem_mb=15000
+        mem_mb=25000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
@@ -170,7 +173,7 @@ rule run_method_NICHES:
 rule run_method_cellchat:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
@@ -189,7 +192,7 @@ rule run_method_cellchat:
 rule run_method_giotto:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
@@ -211,7 +214,7 @@ rule run_method_giotto:
 rule run_method_stlearn:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
@@ -227,7 +230,7 @@ rule run_method_stlearn:
 rule run_method_seurat_wilcoxon:
     threads: 1
     resources:
-        mem_mb=5000
+        mem_mb=10000
     input:
         normalized_counts="output/{dataset}_semiSimulation_NB/inflated_normalized_counts_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.tsv",
         cellmetadata_post_simulation="output/{dataset}_semiSimulation_NB/simulated_cellmetadata_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_indexLR_{indexLR_toSample}.json"
@@ -246,7 +249,7 @@ rule run_method_seurat_wilcoxon:
 rule run_metric_f1score_rankingLRgenes_all:
     threads: 1 # workflow.cores
     resources:
-        mem_mb=1000
+        mem_mb=2000
     input:
         significant_interactions=expand("output/{dataset}/{method}/significant_interactions_FC_{FC}_FC_nSenderCells_{FC_nSenderCells}_FC_nReceiverCells_{FC_nReceiverCells}_l_{l_param_index}_indexLR_{indexLR_toSample}.tsv", FC=config["semiSimulation"]["FC"], FC_nSenderCells=config["semiSimulation"]["FC_nSenderCells"], FC_nReceiverCells=config["semiSimulation"]["FC_nReceiverCells"],dataset=config["datasets"], method=config["methods"], l_param_index=config["l_param_index"], indexLR_toSample=config["indexLR_toSample"])
     output:

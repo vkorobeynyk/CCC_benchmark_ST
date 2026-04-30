@@ -62,5 +62,7 @@ LRdata_df = pd.DataFrame({"ligand_receptor" : cpdb_results["pvalues"]["interacti
 LRdata_df["significant"] = LRdata_df["pval"] < 0.05
 LRdata_df = LRdata_df.rename({"pval":"statistics"},axis=1)
 LRdata_df = LRdata_df.sort_values("statistics") # sort importance column on ascending order
+LRdata_df["ratio_CT2_seen_byMethod"] = 100
+LRdata_df["average_cells_perCT1_seen_byMethod"] = False
 
 LRdata_df.to_csv(significant_interactions_path, sep = "\t")

@@ -52,8 +52,10 @@ inflated_counts = read.csv(normalized_counts_path,sep="\t") %>% as.matrix
 cellmetadata = read_json(path = cellmetadata_path)
 
 '
-inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB/inflated_normalized_counts_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_1.tsv",sep="\t") %>% as.matrix
-cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB/simulated_cellmetadata_FC_1_FC_nSenderCells_1_FC_nReceiverCells_1_indexLR_1.json")
+inflated_counts = read.csv("output/Visium_HD_HPC_semiSimulation_NB//inflated_normalized_counts_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_6_indexLR_2.tsv",sep="\t") %>% as.matrix
+cellmetadata = read_json(path = "output/Visium_HD_HPC_semiSimulation_NB/simulated_cellmetadata_FC_1_FC_nSenderCells_0.5_FC_nReceiverCells_6_indexLR_2.json")
+LR_database = read.table("data/LR_database.tsv", row.names = 1)
+
 '
 
 # transform json list to individual dataframe
@@ -80,11 +82,8 @@ CT2 = cellmetadata$metadata %>% filter(Celltype == "CT2") %>% pull(Cell_ID)
 CT1_signalAdded = cellmetadata$metadata %>% filter(Celltype_updated == "CT1_signalAdded") %>% pull(Cell_ID)
 CT2_signalAdded = cellmetadata$metadata %>% filter(Celltype_updated == "CT2_signalAdded") %>% pull(Cell_ID)
 vec = map(CT1_signalAdded, function(cell_OI) {
-  simulated_neighbors = cellmetadata$neighbor_cells[,cell_OI]
-  
   within_radius = distance_mat[,cell_OI == colnames(distance_mat)] < radius
   return(which(within_radius))
-  
 }) %>% as.list
 
 all_cells_seen_byMethod = colnames(distance_mat)[unlist(vec) %>% unique]
@@ -105,6 +104,29 @@ plt = ggplot(coord, aes(x = x ,y = y)) +
   theme_bw()
 
 ggsave(plot_neighbors_path, plt, device = "png", width = 30, height = 25, units = "cm")
+
+#########################################
+# How many CT2 cells are seen by method #
+#########################################
+amount_CT1_signalAdded_cells = cellmetadata$metadata %>% filter(Celltype_updated == "CT1_signalAdded") %>% nrow
+amount_CT2_signalAdded_cells = cellmetadata$metadata %>% filter(Celltype_updated == "CT2_signalAdded") %>% nrow
+amount_CT2_seen_byMethod = which(all_cells_seen_byMethod %in% (cellmetadata$metadata %>% filter(Celltype_updated == "CT2_signalAdded") %>% pull(Cell_ID))) %>% length
+
+# FCsender > FCreceiver -> how many receivers are seen by method?
+# FCsender < FCreceiver -> do all senders see 1 receiver?
+# FCsender == FCreceiver -> are all receiver seen by CT1 and method
+if(amount_CT2_seen_byMethod != 0) {
+  if (amount_CT1_signalAdded_cells > amount_CT2_signalAdded_cells) {
+    ratio_CT2_seen_byMethod = amount_CT2_seen_byMethod / amount_CT2_signalAdded_cells * 100
+  } else if (amount_CT1_signalAdded_cells < amount_CT2_signalAdded_cells) {
+    ratio_CT2_seen_byMethod = amount_CT1_signalAdded_cells / amount_CT2_seen_byMethod * 100
+  } else if (amount_CT1_signalAdded_cells == amount_CT2_signalAdded_cells) {
+    ratio_CT2_seen_byMethod = amount_CT2_seen_byMethod / amount_CT2_signalAdded_cells * 100
+  }
+} else {ratio_CT2_seen_byMethod = 0}
+
+# average cells that each CT1 has that are seen by method
+average_cells_perCT1_seen_byMethod = length(all_cells_seen_byMethod) / amount_CT1_signalAdded_cells
 
 ##############
 # Run method #
@@ -128,14 +150,15 @@ CellChatDB = CellChatDB.human
 ### Modify database of CellChat according to LR_database.tsv ###
 ################################################################
 # Here I am filtering CellchatDB according to LR_database.tsv file
+'
 # To understand how CellchatDB works, I looked at the example (from LR_database.tsv) of:
-# ligand (L) -> NODAL
-# receptor (R) -> ACVR1B_ACVR2B_CFC1
-# Cellchatdb contains information of subunits and cofactors. When a receptor has multiple subunits, the nomenclature in CellChatDB is R1_R2_R3.
-# When I generated LR_database.tsv file, I changed position of R1 and R2 as cellphonedb has them changed in the output. Do the same here and
-# switch locations of R1 and R2 to R2_R1
+# ligand (L) -> WNT4
+# receptor (R) -> LRP6_FZD8
+# Cellchatdb has the interaction as WNT4_FZD8_LRP6 but LR_database has WNT4_LRP6_FZD8
+# Here I switch the receptor order
+# I cant switch the order in cellchatDB directly because otherwise the cellchat wont recognize the interaction as valid
 
-fix_gene_order = function(df) { # fix this here as the results wont match
+fix_gene_order = function(df) {
   sapply(df, function(x) 
   {
     parts = strsplit(x, "_")[[1]]
@@ -148,7 +171,7 @@ LR_database$receptor = fix_gene_order(LR_database$receptor)
 LR_database$ligand = fix_gene_order(LR_database$ligand)
 LR_database$interaction_name  = str_c(LR_database$ligand, "_", LR_database$receptor)
 
-'
+
 just the same as in LR_database.tsv file
 '
 # cellchatDB is a list with 4 entries:
@@ -156,7 +179,7 @@ just the same as in LR_database.tsv file
 # geneInfo has information of single genes -> not necessary to filter
 # complex -> no need to filter because cellchat just fetches what it needs
 # cofactors I am not simulating -> I simply remove them from the database
-CellChatDB$interaction = CellChatDB$interaction[which(CellChatDB$interaction$interaction_name %in% LR_database$interaction_name),]
+CellChatDB$interaction = CellChatDB$interaction[which(CellChatDB$interaction$interaction_name %in% LR_database$ligand_receptor),]
 
 stopifnot(nrow(CellChatDB$interaction) == nrow(LR_database))
 
@@ -168,41 +191,61 @@ CellChatDB$cofactor = x %>% as.data.frame() # cellchat requires dataframe
 cellchat@DB = CellChatDB # dim() same as in LRdatabase
 
 cellchat = subsetData(cellchat) # This step is necessary even if using the whole database
+
 # wilcoxon test to remove features
 # only uses pvalue threshold
 cellchat = identifyOverExpressedGenes(cellchat,min.cells = 0,thresh.fc = 0,thresh.p = 0.05) 
 cellchat = identifyOverExpressedInteractions(cellchat) # 
 
-'
-When inferring contact-dependent or juxtacrine signaling, users should provide a value of contact.range and set contact.dependent = TRUE. 
-Briefly, users can set contact.range = 10, which is a typical human cell size. 
-However, for low-resolution spatial data such as 10X visium, it should be the cell center-to-center distance (i.e., contact.range = 100 for 10X visium data). 
-Please check the vignette of FAQ on applying CellChat to spatially resolved transcriptomics data for detailed explanations. 
-In this example, we did not use the L-R pairs from Cell-Cell Contact signaling, therefore we can set contact.dependent = FALSE and contact.range = NULL. 
-But as an illustration, we use the following settings that lead to the same results.
+# if wilcoxon test results didnt find any significant LR to test for spatial
+if(nrow(cellchat@LR$LRsig) == 0)
+{
+  write.table(data.frame(ligand_receptor = NA , significant = FALSE, statistics = 0, 
+                         ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod, 
+                         average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path)
+} else{
+  '
+  When inferring contact-dependent or juxtacrine signaling, users should provide a value of contact.range and set contact.dependent = TRUE. 
+  Briefly, users can set contact.range = 10, which is a typical human cell size. 
+  However, for low-resolution spatial data such as 10X visium, it should be the cell center-to-center distance (i.e., contact.range = 100 for 10X visium data). 
+  Please check the vignette of FAQ on applying CellChat to spatially resolved transcriptomics data for detailed explanations. 
+  In this example, we did not use the L-R pairs from Cell-Cell Contact signaling, therefore we can set contact.dependent = FALSE and contact.range = NULL. 
+  But as an illustration, we use the following settings that lead to the same results.
+  
+  Of note, ‘trimean’ approximates 25% truncated mean, 
+  implying that the average gene expression is zero if the percent of expressed cells in one group is less than 25%
+  '
+    # When comparing communication across different CellChat objects, the same scale factor should be used
+    # I tested different scale.distance (0.1,0.5,1) and the results didnt change. What changes is the probability but pvalue always stays the same
+    
+    '
+  Re: nboot  (https://github.com/sqjin/CellChat/issues/244)
+  I think the results will not change too much. If nboot = 100, then thresh = 0.05 means there are five permuations having larger 
+  communication probabilities. If nboot = 20, then thresh = 0.05 means there are one permutation having larger communication pprobabilities.
+  '
+    
+  # As we are testing amount of cells that should express each gene, I set trim = 0.001 -> 0.1% of cells have to express the gene 
+  cellchat = computeCommunProb(cellchat, type = "truncatedMean", trim = 0.001,
+                               distance.use = TRUE, interaction.range = radius, scale.distance = 1, 
+                               contact.dependent = FALSE,contact.range = NULL, nboot = 100)
+  
+  df.net = subsetCommunication(cellchat, thresh = 1) # threshold of the p-value for determining significant interaction
+  
+  df.net %<>% filter(source == "CT1" & target == "CT2") %>% mutate(ligand_receptor = gsub("—","_",interaction_name),
+                                                                   significant = pval < 0.05, # only returns significant 
+                                                                   statistics = prob) %>% dplyr::arrange(desc(prob))
+  
+  
+  # save data
+  if(nrow(df.net) != 0)
+  {
+    write.table(data.frame(ligand_receptor = df.net$interaction_name , significant = df.net$significant, statistics = df.net$prob, 
+                           ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod,
+                           average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path)
+  } else {
+    write.table(data.frame(ligand_receptor = NA , significant = FALSE, statistics = 0, 
+                           ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod, 
+                           average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path)
+  }
+}
 
-Of note, ‘trimean’ approximates 25% truncated mean, 
-implying that the average gene expression is zero if the percent of expressed cells in one group is less than 25%
-'
-# When comparing communication across different CellChat objects, the same scale factor should be used
-# I tested different scale.distance (0.1,0.5,1) and the results didnt change. What changes is the probability but pvalue always stays the same
-
-'
-Re: nboot  (https://github.com/sqjin/CellChat/issues/244)
-I think the results will not change too much. If nboot = 100, then thresh = 0.05 means there are five permuations having larger 
-communication probabilities. If nboot = 20, then thresh = 0.05 means there are one permutation having larger communication pprobabilities.
-'
-# As we are testing amount of cells that should express each gene, I set trim = 0.001 -> 0.1% of cells have to express the gene 
-cellchat = computeCommunProb(cellchat, type = "truncatedMean", trim = 0.001,
-                              distance.use = TRUE, interaction.range = radius, scale.distance = 1, 
-                              contact.dependent = FALSE,contact.range = NULL, nboot = 100)
-
-df.net = subsetCommunication(cellchat, thresh = 1) # threshold of the p-value for determining significant interaction
-
-df.net %<>% filter(source == "CT1" & target == "CT2") %>% mutate(ligand_receptor = gsub("—","_",interaction_name),
-                                                                  significant = pval < 0.05, # only returns significant 
-                                                                  statistics = prob) %>% dplyr::arrange(desc(prob))
-
-
-# save data
-write.table(data.frame(ligand_receptor = df.net$interaction_name , significant = df.net$significant, statistics = df.net$prob) ,significant_interactions_path)
