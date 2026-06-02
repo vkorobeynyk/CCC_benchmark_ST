@@ -202,7 +202,8 @@ if(nrow(cellchat@LR$LRsig) == 0)
 {
   write.table(data.frame(ligand_receptor = NA , significant = FALSE, statistics = 0, 
                          ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod, 
-                         average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path)
+                         average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path,
+              sep = "\t")
 } else{
   '
   When inferring contact-dependent or juxtacrine signaling, users should provide a value of contact.range and set contact.dependent = TRUE. 
@@ -241,11 +242,13 @@ if(nrow(cellchat@LR$LRsig) == 0)
   {
     write.table(data.frame(ligand_receptor = df.net$interaction_name , significant = df.net$significant, statistics = df.net$prob, 
                            ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod,
-                           average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path)
+                           average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path,
+                sep = "\t")
   } else {
     write.table(data.frame(ligand_receptor = NA , significant = FALSE, statistics = 0, 
                            ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod, 
-                           average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path)
+                           average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path,
+                sep = "\t")
   }
 }
 

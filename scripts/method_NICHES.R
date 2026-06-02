@@ -171,10 +171,10 @@ if(nrow(markers_CtN) != 0)
 {
   markers_CtN$ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod
   markers_CtN$average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod
-  write.table(markers_CtN ,significant_interactions_path)
+  write.table(markers_CtN ,significant_interactions_path, sep = "\t")
 } else {
   write.table(data.frame(ligand_receptor = NA , significant = FALSE, statistics = 0, 
                          ratio_CT2_seen_byMethod = ratio_CT2_seen_byMethod,
-                         average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path)
+                         average_cells_perCT1_seen_byMethod = average_cells_perCT1_seen_byMethod) ,significant_interactions_path,sep = "\t")
 }
 

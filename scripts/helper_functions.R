@@ -302,7 +302,7 @@ compute_diagnostic_plots = function(counts , master_lst, indexLR ,FC_nSenderCell
   {
     x = params_grid[i,] %>% as.numeric ;  names(x) = c("indexLR","FC_nSenderCells","FC_nReceiverCells")
     
-    n = grep(paste0("FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"],"_indexLR_",x["indexLR"]), names(master_lst))
+    n = grep(paste0("FC_nSenderCells_",x["FC_nSenderCells"], "_FC_nReceiverCells_", x["FC_nReceiverCells"],"_indexLR_",x["indexLR"], "$"), names(master_lst))
     file = names(master_lst)[n]
     # Select what genes to label as L_R
     LR_genes_color = c(master_lst[[file]]$CT1,master_lst[[file]]$CT2) %>% str_split(., "_") %>% unlist # for cases when we have R1_R2 subunits

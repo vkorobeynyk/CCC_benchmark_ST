@@ -29,8 +29,6 @@ significant_interactions_path = snakemake@output[["significant_interactions"]]
 ##############
 ### Params ###
 ##############
-config = yaml::read_yaml("config.yaml")
-
 dataset = snakemake@params["dataset"] %>% as.character
 
 LR_database_path = snakemake@params[["LR_database"]]
@@ -70,7 +68,7 @@ LR_database = lapply(lst, function(x) {
     expand.grid() %>%
     mutate(ligand_receptor = x$ligand_receptor) 
   
-  #colnames(grid)[1:2] = c("ligand","receptor")
+  colnames(grid)[1:2] = c("ligand","receptor")
   all_present = (grid %>% select("ligand","receptor") %>% unlist ) %in% rownames(SO_obj) %>%
     all
   
@@ -167,4 +165,4 @@ seurat_LRR_averaged_out$ratio_CT2_seen_byMethod = 100
 seurat_LRR_averaged_out$average_cells_perCT1_seen_byMethod = FALSE
 
 # save data
-write.table(seurat_LRR_averaged_out ,significant_interactions_path)
+write.table(seurat_LRR_averaged_out ,significant_interactions_path, sep = "\t")

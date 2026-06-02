@@ -108,12 +108,36 @@ simulated_interactions_lst = list()
 # Also pre-sample the subunit genes
 comb_CT = "CT1_CT2"
 
+
 # select LR pair to inflate expression according to index indexLR_toSample
-LR_sample = LRdb[indexLR_toSample,]
+# make sure half of LR pairs are with 2 subunits and half with only 1 subunit
+config = yaml::read_yaml("config.yaml")
+
+# Filter LRdatabase
+LR_subset_1_under = LRdb[str_count(LRdb$ligand_receptor, "_") == 1, ]
+LR_subset_2_under = LRdb[str_count(LRdb$ligand_receptor, "_") == 2, ]
+
+idx = match(indexLR_toSample,  config$indexLR_toSample)
+halfway = length( config$indexLR_toSample) / 2
+
+if (idx <= halfway) {
+  # --- FIRST HALF (5 rows with 1 "_") ---
+  LR_sample = LR_subset_1_under[indexLR_toSample, ]
+  
+} else {
+  # --- SECOND HALF (5 rows with 2 "_") ---
+  local_idx = idx - halfway
+  
+  # In case the indexLR to sample is too big
+  stopifnot((indexLR_toSample/2) < nrow(LR_subset_2_under))
+    
+  LR_sample = LR_subset_2_under[local_idx, ]
+}
+
 simulated_interactions_lst[[comb_CT]]$ligand = LR_sample$ligand
 simulated_interactions_lst[[comb_CT]]$receptor = LR_sample$receptor
 
-### STRATEGY 3 - remove expression of ligand/receptor to see if giotto performance increases
+### STRATEGY 2 - remove expression of ligand/receptor to see if giotto performance increases
 #counts[strsplit(simulated_interactions_lst$CT1_CT2$ligand, "_") %>% unlist,sample(colnames(counts), size = ncol(counts) * 0.95)] = 0
 #counts[strsplit(simulated_interactions_lst$CT1_CT2$receptor, "_") %>% unlist,sample(colnames(counts), size = ncol(counts) * 0.95)] = 0
 
@@ -149,7 +173,7 @@ p = ggplot(cellmetadata$metadata, aes(x = x, y = y,color = Celltype_updated, siz
   xlab("x") +
   ylab("y")+  
   scale_color_manual(values = c("#FFCCFF" ,"#990099" ,"#CCCCFF" ,"#0000FF" ,"#FFCC99")) +
-  scale_size_manual(values = c(2,3,2,3,1)) +
+  scale_size_manual(values = c(1.5,3,1.5,3,0.5)) +
   theme_bw()
 
 ggsave(filename = plot_neighbors_path, plot = p, width = 200, height = 150, units = "mm")

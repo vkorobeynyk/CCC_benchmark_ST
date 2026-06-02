@@ -88,8 +88,8 @@ LR_expanded = LR_expanded.drop_duplicates(subset="expanded").reset_index(drop=Tr
 st.tl.cci.run(adata, LR_expanded["expanded"].to_numpy(),
               min_spots=0,  # Filter out any LR pairs with no scores for less than min_spots
               distance=l,  # None defaults to spot+immediate neighbours; distance=0 for within-spot mode
-              n_pairs=1000,  # Number of random pairs to generate; low as example, recommend ~10,000
-              n_cpus=None,   # Number of CPUs for parallel. If None, detects & use all available.
+              n_pairs=250,  # Number of random pairs to generate; low as example, recommend ~10,000
+              n_cpus=None   # Number of CPUs for parallel. If None, detects & use all available.
               )
 
 st.tl.cci.adj_pvals(adata, correct_axis='spot', pval_adj_cutoff=0.05, adj_method='fdr_bh')
@@ -99,10 +99,10 @@ st.tl.cci.adj_pvals(adata, correct_axis='spot', pval_adj_cutoff=0.05, adj_method
 st.tl.cci.run_cci(adata, 'Celltype',  # Spot cell information either in data.obs or data.uns
                   min_spots=0,          # Minimum number of spots for LR to be tested.
                   spot_mixtures=False,   # If True will use the label transfer scores,
-                                        # so spots can have multiple cell types if score>cell_prop_cutoff
-                  cell_prop_cutoff=0, # Spot considered to have cell type if score>0.2
-                  sig_spots=True,       # Only consider neighbourhoods of spots which had significant LR scores.
-                  n_perms=50            # Permutations of cell information to get background, recommend at least ~1000
+                                       
+                  cell_prop_cutoff=0, 
+                  sig_spots=True,      
+                  n_perms=10            
                  )
                  
 

@@ -68,9 +68,9 @@ LR_database = read.table("data/LR_database.tsv", row.names = 1)
 
 ####################### STRAT 1
 ###### sample randomly CT1 and CT2 cells
-metadata$Celltype = "Other"
-metadata[sample(metadata%>% filter(Celltype == "Other") %>% pull(Cell_ID), 500), "Celltype"] = "CT1"
-metadata[sample(metadata%>% filter(Celltype == "Other") %>% pull(Cell_ID), 500), "Celltype"] = "CT2"
+#metadata$Celltype = "Other"
+#metadata[sample(metadata%>% filter(Celltype == "Other") %>% pull(Cell_ID), 500), "Celltype"] = "CT1"
+#metadata[sample(metadata%>% filter(Celltype == "Other") %>% pull(Cell_ID), 500), "Celltype"] = "CT2"
 
 ###### Downsample datasets for celltypes besides CT1 and CT2
 #set.seed(1)
@@ -90,17 +90,18 @@ counts = counts[rowSums(counts) != 0 & rowSums(counts != 0) > 10,]
 ################ STRAT 2 - manually select cells to create colocalization
 # the removal of expression happens in the semisimukation script (search for STRATEGY 3)
 ### I use shiny code from script /CCC_benchmark_ST/shiny_forSelectingCells to manually select cells in space
-#set.seed(1)
-#if(dataset == "Visium_HD_HPC") {cells = c(read.csv("data/Visium_HD_HPC/DG.csv") %>% pull(Cell_ID) , read.csv("data/Visium_HD_HPC/CAx.csv") %>% pull(Cell_ID) )
-#} else if(dataset == "MERFISH_mColon") {cells = read.csv("data/MERFISH_mColon/selected_cells.csv") %>% pull(Cell_ID)
-#}
+set.seed(1)
+if(dataset == "Visium_HD_HPC") {cells = read.csv("data/Visium_HD_HPC/DG_cells.csv") %>% pull(Cell_ID)
+} else if(dataset == "MERFISH_mColon") {cells = read.csv("data/MERFISH_mColon/selected_cells.csv") %>% pull(Cell_ID)
+} else if(dataset == "CosMx_HFC") {cells = read.csv("data/CosMx_HFC/selected_cells.csv") %>% pull(Cell_ID)
+}
 # split half cells to be CT1 and half CT2
-#ct1cells = sample(cells, length(cells)*0.5)
-#ct2cells = setdiff(cells, ct1cells)
+ct1cells = sample(cells, length(cells)*0.5)
+ct2cells = setdiff(cells, ct1cells)
 
-#metadata[, "Celltype"] = "Other"
-#metadata$Celltype[metadata$Cell_ID %in% ct1cells]= "CT1"
-#metadata$Celltype[metadata$Cell_ID %in% ct2cells] = "CT2"
+metadata[, "Celltype"] = "Other"
+metadata$Celltype[metadata$Cell_ID %in% ct1cells]= "CT1"
+metadata$Celltype[metadata$Cell_ID %in% ct2cells] = "CT2"
 
 ############################################################
 #### Calculate percentage of cells expressing L/R genes  ###
@@ -131,16 +132,16 @@ average_percentageCells_expressingLR = apply(counts[which(rownames(counts) %in% 
 #   - at 100 we are checking how methods behave even tough they see same amount of interaction
 if(dataset == "Visium_HD_HPC") {
   distance = 250
-  distance_post_filtering_lower = 150
-  distance_post_filtering_upper = 350
+  distance_post_filtering_lower = 0
+  distance_post_filtering_upper = Inf
 } else if(dataset == "MERFISH_mColon") {
   distance = 50
-  distance_post_filtering_lower = 30
-  distance_post_filtering_upper = 70
+  distance_post_filtering_lower = 0
+  distance_post_filtering_upper = Inf
 }  else if(dataset == "CosMx_HFC") {
   distance = 250
-  distance_post_filtering_lower = 220
-  distance_post_filtering_upper = 350
+  distance_post_filtering_lower = 0
+  distance_post_filtering_upper = Inf
 } 
 
 # there is a big variability for distances before and after sampling
@@ -266,7 +267,7 @@ p = ggplot() +
   
   scale_color_manual(values = c("#990099", "#0000FF", "orange")) +
   scale_size_manual(values = c(1.5, 1.5, 0.25))
-
+# p + coord_cartesian(xlim = c(7000, 8000), ylim = c(11900, 13000))
 
 ggsave(filename = plot_radius, plot = p, width = 200, height = 150, units = "mm")
 
