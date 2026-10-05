@@ -22,6 +22,10 @@ Generative AI was used throughout this entire benchmark to make code nicer to re
 
 <!-- TODO: add manuscript reference / preprint link -->
 
+## License
+
+This project is released under the [MIT License](LICENSE).
+
 
 ## Methods benchmarked
 
