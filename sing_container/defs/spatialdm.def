@@ -1,0 +1,8 @@
+Bootstrap: docker
+From: python:3.11-bookworm
+
+%post
+    apt-get -y update
+    pip install --upgrade pip
+
+    pip install -U SpatialDM==0.3.1 ipykernel==6.29.5 scipy==1.12.0 matplotlib==3.9.2 coverage==7.13.5

@@ -1,0 +1,10 @@
+Bootstrap: docker
+From: python:3.11-bookworm
+
+%post
+    apt-get -y update
+  
+    pip install liana[full]
+
+    # scipy needs to be downgraded for lianaPlus
+    pip install ipykernel==6.29.5 rds2py==0.5.0 scipy==1.13.1 anndata==0.10.8 # anndata version is require by current liana

@@ -1,0 +1,13 @@
+Bootstrap: docker
+From: bioconductor/bioconductor_docker:RELEASE_3_19-R-4.4.0
+
+%post
+    apt-get update
+    
+    apt-get install -y libmagick++-dev # for spatialexperiment
+
+    # Install R packagers
+    R -e "install.packages('BiocManager')"
+    R -e "BiocManager::install('mistyR')"
+
+    R -e "packages = c('dplyr','dtplyr','devtools','ggplot2','ggpubr','stringr','optparse')"

@@ -1,0 +1,9 @@
+Bootstrap: docker
+From: python:3.11-bookworm
+
+%post
+    apt-get -y update
+  
+    pip install cellphonedb==5.0.1
+
+    pip install ipykernel==6.29.5

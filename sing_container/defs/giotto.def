@@ -1,0 +1,9 @@
+Bootstrap: docker
+From: bioconductor/bioconductor_docker:RELEASE_3_19-R-4.4.1
+
+%post
+    apt-get update
+    
+    # Install R packagers
+    R -e "packages = c('geometry','pak','dplyr','rjson','future','future.apply','devtools','jsonlite','ggplot2','ggpubr','stringr','optparse') ; install.packages(packages,dependencies = TRUE)"
+    R -e "pak::pkg_install('drieslab/Giotto')"

@@ -1,0 +1,18 @@
+#!/bin/bash
+
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=5G
+#SBATCH --time=144:00:00
+#SBATCH --output=log/main_%j
+
+module load miniforge3
+source activate snakemake
+snakemake --unlock
+module load apptainer
+module load intel
+
+./fix_indentation.sh Snakefile
+./fix_indentation.sh config.yaml
+snakemake --jobs 28 --rerun-incomplete --use-singularity --singularity-args '--bind /home/vkorob/scratch/CCC_benchmark_ST_afterLLM:/home/vkorob/scratch/CCC_benchmark_ST_afterLLM' --profile slurm "$@"
+
+

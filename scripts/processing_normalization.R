@@ -1,27 +1,46 @@
+# ============================================================================
+# Normalizes the semi-simulated ("inflated") counts using scater's
+# logNormCounts, so every CCC method downstream consumes the same normalized
+# expression matrix.
+# ============================================================================
+
 suppressMessages({
   library(scater)
   library(SpatialExperiment)
   library(dplyr)
 })
 
-# An useful error if the argument is missing
-if (is.null(snakemake@input[["inflated_counts"]]) | is.null(snakemake@output[["normalized_counts"]]) ){
-  stop("Argument_name needs to be specified, but is missing.n", call.=FALSE)
+# Fail early with a clear error if a required input/output is missing
+if (is.null(snakemake@input[["inflated_counts"]]) | is.null(snakemake@output[["normalized_counts"]])) {
+  stop("Argument_name needs to be specified, but is missing.n", call. = FALSE)
 }
 
-#############
-### INPUT ###
-#############
-inflated_counts_path = snakemake@input[["inflated_counts"]] # Processed and inflated counts counts
+# ==============================================================================
+# STEP 0: Snakemake I/O
+# ==============================================================================
 
-##############
-### OUTPUT ###
-##############
-normalized_counts_path = snakemake@output[["normalized_counts"]] # Processed, inflated and normalized counts
+# input files
+inflated_counts_path = snakemake@input[["inflated_counts"]]
+
+# output files
+normalized_counts_path = snakemake@output[["normalized_counts"]] 
+
+# ==============================================================================
+# STEP 1: load the inflated counts
+# ==============================================================================
 
 inflated_counts = read.table(inflated_counts_path)
 
-# Normalize counts using scater package
-normalized_inflated_counts = SingleCellExperiment(list(counts = inflated_counts)) %>% logNormCounts %>% assay(., "logcounts")
+# ==============================================================================
+# STEP 2: log-normalize (scater::logNormCounts)
+# ==============================================================================
 
-write.table(normalized_inflated_counts , normalized_counts_path, sep = "\t")
+normalized_inflated_counts = SingleCellExperiment(list(counts = inflated_counts)) %>%
+  logNormCounts %>%
+  assay(., "logcounts")
+
+# ==============================================================================
+# STEP 3: save output
+# ==============================================================================
+
+write.table(normalized_inflated_counts, normalized_counts_path, sep = "\t")

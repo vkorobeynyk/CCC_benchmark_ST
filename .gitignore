@@ -1,0 +1,10 @@
+*.ipynb
+file.png
+Rplots.pdf
+data
+output
+log
+pdf_to_png.sh
+scripts/.ipynb_checkpoints
+sing_container/*.sif
+

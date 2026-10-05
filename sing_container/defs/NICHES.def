@@ -1,0 +1,13 @@
+Bootstrap: docker
+From: bioconductor/bioconductor_docker:3.21-R-4.5.1
+
+%post
+    apt-get update
+    
+    # Install R packagers
+    R -e "packages = c('dplyr','devtools','jsonlite','ggplot2','ggpubr','stringr','optparse') ; install.packages(packages,dependencies = TRUE)"
+    R -e "devtools::install_github('immunogenomics/presto')"
+    R -e "remotes::install_github('satijalab/seurat', ref = 'v5.3.0')"
+    R -e "remotes::install_github('mojaveazure/seurat-object', ref = 'v5.1.0')"
+    R -e "install.packages('https://cran.r-project.org/src/contrib/00Archive/BisRNA/BisRNA_0.2.2.tar.gz', repos = NULL, type = 'source')" # dependecie of NICHES that was taken out from cran
+    R -e "devtools::install_github('msraredon/NICHES', ref = 'master')"

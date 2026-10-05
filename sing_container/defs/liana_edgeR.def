@@ -1,0 +1,18 @@
+Bootstrap: docker
+#From: bioconductor/bioconductor_docker:RELEASE_3_19-R-4.4.0
+From: bioconductor/bioconductor_docker:3.21-R-4.5.1
+
+%post
+    apt-get update
+    
+    apt-get install -y libmagick++-dev # for spatialexperiment
+
+    # Install R packagers
+    R -e "install.packages('BiocManager')"
+    R -e "BiocManager::install(c('scran', 'entropy','OmnipathR' , 'SingleCellExperiment','scater','basilisk', 'ComplexHeatmap','rhdf5','DropletUtils','ggspavis', 'SpatialExperiment','edgeR'))"
+
+    R -e "packages = c('devtools','jsonlite','ggpubr','stringr','optparse','ica','scattermore','remotes', 'sf','fmsb','ggExtra','ggforce') ; install.packages(packages,dependencies = TRUE)"
+    R -e "devtools::install_github('saezlab/liana')"
+    R -e "devtools::install_github('immunogenomics/presto')" # for speedy wilcoxon test
+    R -e "remotes::install_github('satijalab/seurat', ref = 'v5.3.0')"
+    R -e "remotes::install_github('mojaveazure/seurat-object', ref = 'v5.1.0')"
