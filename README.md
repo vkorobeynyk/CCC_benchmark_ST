@@ -2,11 +2,12 @@
 
 A reproducible benchmark of **spatial cell-cell communication (CCC) methods** on spatial transcriptomics data.
 
-Real spatial datasets are **semi-simulated**: a known ligand-receptor (LR) signal is added to selected Sender and Receiver cells. Each method is then scored on whether it recovers that pair. The workflow is built with [Snakemake], runs on a SLURM cluster, and runs every step inside a Singularity container.
+Real spatial datasets are **semi-simulated**: a known ligand-receptor (LR) signal is planted in chosen Sender and Receiver cells. Each method is then scored on whether it recovers that pair. The workflow is built with [Snakemake](https://snakemake.readthedocs.io/), runs on a SLURM cluster, and runs every step inside a Singularity/Apptainer container.
 
-This repository is the spatial part of a two-part benchmark. The single-cell part lives in the `CCC_benchmark` repository.
+This repository is the spatial part of a two-part benchmark. The single-cell part lives in the companion `CCC_benchmark` repository.
 
 The data folder used in the benchmark, along with the output folder can be found in ................
+
 ---
 
 ## Contact
@@ -17,8 +18,10 @@ Questions and bug reports: please open a [GitHub issue](https://github.com/vkoro
 ## Generative AI statement
 Generative AI was used throughout this entire benchmark to make code nicer to read and more efficient. The entire logic of the benchmark was created by myself and I assume responsability of the content within this repo.
 
-## Citation 
+## Citation
+
 <!-- TODO: add manuscript reference / preprint link -->
+
 
 ## Methods benchmarked
 
@@ -33,19 +36,26 @@ Generative AI was used throughout this entire benchmark to make code nicer to re
 | [CellPhoneDB v5](https://github.com/ventolab/CellphoneDB) (with microenvironments) | Python | `cellphonedbv5.sif` | partly (microenvironment file) |
 | Seurat Wilcoxon (baseline) | R | `liana_edgeR.sif` | ❌ |
 
-Seurat Wilcoxon has no spatial information. It is the baseline for measuring how much the spatial methods gain from using spacial coordinates. `Table2_spatial_Cell_Communication_Summary.pdf` (made by `generate_table.R`) summarises how each method scores interactions and tests significance.
+Seurat Wilcoxon has no spatial information. It is the baseline for measuring how much the spatial methods gain from using space. `Table2_spatial_Cell_Communication_Summary.pdf` (made by `generate_table.R`) summarises how each method scores interactions and tests significance.
 
 ## Datasets
 
 Set in `config.yaml` → `datasets`:
 
-| ID | Technology | Tissue |
-|---|---|---|
-| `Visium_HD_HPC` | 10x Visium HD (binned to cells with Bin2cell) | Mouse brain / hippocampus |
-| `MERFISH_mColon` | MERFISH | Mouse colon |
-| `CosMx_HFC` | NanoString CosMx | <!-- TODO: tissue --> |
+| ID | Technology | Tissue | Source |
+|---|---|---|---|
+| `Visium_HD_HPC` | 10x Visium HD (binned to cells with Bin2cell) | Mouse brain / hippocampus | [10x Genomics](https://www.10xgenomics.com/datasets/visium-hd-cytassist-gene-expression-mouse-brain-fresh-frozen) |
+| `MERFISH_mColon` | MERFISH | Mouse colon | [Dryad](https://datadryad.org/dataset/doi:10.5061/dryad.rjdfn2zh3) (Cadinu et al., 2024, *Cell*) |
+| `CosMx_HFC` | NanoString CosMx | Human frontal cortex (FFPE) | [NanoString](https://nanostring.com/products/cosmx-spatial-molecular-imager/ffpe-dataset/human-frontal-cortex-ffpe-dataset/) |
 
 Raw data is **not** in the repository (`data/` is git-ignored). See [Input data](#input-data) for the expected layout. Download notes are in `data/download_data.R`.
+
+### Dataset preprocessing
+
+Before entering the pipeline, each dataset was converted into a cell × gene count matrix (`counts_<dataset>.tsv`) and a per-cell metadata table (`metadata_<dataset>.tsv` with `Cell_ID`, `Celltype`, `x`, `y`).
+
+- **`Visium_HD_HPC`**: The 2 µm bins were assigned to cells with [Bin2cell](https://github.com/Teichlab/bin2cell), and counts were summed per cell to give a gene × cell matrix.
+- **`CosMx_HFC`**: Coordinates were converted from millimetres to micrometres. Some cell types were removed, reducing the original ~190k cells to ~32k. That set was then randomly subsampled to 1/4 (~8k cells) to lower computational cost.
 
 ---
 
@@ -58,7 +68,7 @@ Both strategies run in a single Snakemake call and write to separate output tree
 | Strategy | How Sender/Receiver cells are chosen | Question it asks |
 |---|---|---|
 | `spatialScattering` | Randomly across the whole tissue, so Sender-Receiver distances cover the dataset's full range | Can methods find a signal that is spread out in space? |
-| `spatialColocalization` | From a hand-picked group of cells that sit together in one region (chosen with `shiny_script_forSelectingCells.R`), split at random into Sender and Receiver halves | Can methods find a signal that is spatially colocalized? |
+| `spatialColocalization` | From a hand-picked group of cells that sit together in one region (chosen with `shiny_script_forSelectingCells.R`), split at random into Sender and Receiver halves | Can methods find a signal that is spatially concentrated? |
 
 ### Semi-simulation
 
@@ -66,7 +76,7 @@ For each dataset, the pipeline:
 
 1. Estimates per-gene mean and dispersion with **edgeR**, using real per-cell offsets.
 2. Takes **one LR pair** from `data/LR_database.tsv` (`indexLR_toSample`). Pairs are simulated one at a time so the already sparse spatial data is not distorted.
-3. Increases ligand counts in some Sender cells and receptor counts in some Receiver cells. New counts are drawn from a negative binomial, `1 + rnbinom(mu = gene_rate · exp(cell_offset), size = 1/dispersion)`. For multi-subunit complexes, every subunit gets the signal.
+3. Raises ligand counts in some Sender cells and receptor counts in some Receiver cells. New counts are drawn from a negative binomial, `1 + rnbinom(mu = gene_rate · exp(cell_offset), size = 1/dispersion)`. For multi-subunit complexes, every subunit gets the signal.
 4. Sets how many cells get the signal with `PCE_Sender` / `PCE_Receiver`:
 
    ```
@@ -86,11 +96,11 @@ Each `(strategy, dataset, method)` combination is run over:
 | `indexLR_toSample` | Which LR pair is simulated | 1–10 |
 | `radius_param_index` | Which neighbourhood size is used (index into `radius_param`) | 0, 1, 2 |
 
-`radius_param` in `config.yaml` sets the neighbourhood size (Euclidean radius or kernel bandwidth) for **each method and dataset**, in that dataset's coordinate units. The values in `config.yaml` were selected by trial and error (as methods calculate distances differently) to keep the similar amount of spatial neighbors.
+`radius_param` in `config.yaml` sets the neighbourhood size (Euclidean radius or kernel bandwidth) for **each method and dataset**, in that dataset's coordinate units.
 
 ### Scoring
 
-`scripts/metric_f1score_rankingLRgenes.R` gets every method's `significant_interactions_*.tsv` for one strategy. It treats the simulated Sender → Receiver LR pair as ground truth and computes **precision, recall, F1 and the rank** of the true pair. Results are saved to `output/<strategy>/final_scores.RDS`, and `scripts/visualization.R` turns them into the summary figures.
+`scripts/metric_f1score_rankingLRgenes.R` gathers every method's `significant_interactions_*.tsv` for one strategy. It treats the simulated Sender → Receiver LR pair as ground truth and computes **precision, recall, F1 and the rank** of the true pair. Results are saved to `output/<strategy>/final_scores.RDS`, and `scripts/visualization.R` turns them into the summary figures.
 
 ---
 
@@ -104,7 +114,7 @@ data/<dataset>/{counts,metadata}_<dataset>.tsv
                                       edgeR mean/dispersion  (processing_dataset_<strategy>.R)
         │
         ▼
-2. run_semiSimulation_inflateCounts   add the LR signal  (processing_semisimulation_nbsampling.R)
+2. run_semiSimulation_inflateCounts   plant the LR signal  (processing_semisimulation_nbsampling.R)
         │
         ▼
 3. run_normalization                  scater::logNormCounts  (processing_normalization.R)
@@ -126,9 +136,10 @@ CCC_benchmark_ST/
 ├── Snakefile                         # workflow definition (rules for steps 1–6)
 ├── config.yaml                       # datasets, strategies, methods, parameter grids
 ├── sbatch_submit                     # SLURM submission script for the Snakemake driver
-├── fix_indentation.sh                # normalises indentation in Snakefile/config before a run (probably just local problem)
+├── fix_indentation.sh                # normalises indentation in Snakefile/config before a run
 ├── generate_table.R                  # builds Table 2 (method summary)
 ├── shiny_script_forSelectingCells.R  # interactive cell picker for spatialColocalization
+├── merge_svg_to_pdf.sh               # figure post-processing helper
 ├── scripts/
 │   ├── processing_dataset_spatialScattering.R
 │   ├── processing_dataset_spatialColocalization.R
@@ -161,7 +172,7 @@ CCC_benchmark_ST/
 ### Requirements
 
 - [Snakemake](https://snakemake.readthedocs.io/) with a SLURM profile (`--profile slurm`)
-- [Apptainer](https://apptainer.org/) (not tested) or [SingularityCE](https://sylabs.io/singularity/) ≥ 4.0
+- [Apptainer](https://apptainer.org/) or [SingularityCE](https://sylabs.io/singularity/) ≥ 4.0
 - A SLURM cluster (the pipeline can also run locally if you drop `--profile slurm`, but the full grid is large)
 
 ### 1. Build the containers
@@ -185,8 +196,9 @@ data/
 ├── LR_database.tsv                          # curated LR database (see below)
 ├── <dataset>/
 │   ├── counts_<dataset>.tsv                 # genes × cells raw count matrix
-│   ├── metadata_<dataset>.tsv               # per-cell metadata incl. spatial coordinates, Sender and Receiver celltypes
-│   └── selected_cells.csv                   # spatialColocalization only (Cell_ID column)
+│   ├── metadata_<dataset>.tsv               # per-cell metadata incl. spatial coordinates
+│   └── selected_cells.csv                   # spatialColocalization only (Cell_ID column);
+│                                            #   Visium_HD_HPC uses DG_cells.csv
 └── cpdbv5_extrafiles/
     ├── microenvironment.tsv                 # CellPhoneDB microenvironment definition
     └── cellphonedb_<version>.zip            # CellPhoneDB v5 database
@@ -213,7 +225,7 @@ sbatch sbatch_submit
 To run one strategy only:
 
 ```bash
-snakemake --use-singularity output/spatialScattering/visualize_results.done
+snakemake --use-singularity --profile slurm output/spatialScattering/visualize_results.done
 ```
 
 ## Outputs
@@ -234,4 +246,4 @@ data/processed/<strategy>/<dataset>/ # processed counts, edgeR estimates, QC and
 - **stLearn** runs through `shell:` with an argparse CLI, not `script:`. Snakemake's script mode clashes with stLearn's Python 3.10 environment.
 - **CellChat** sets `scale.distance` from the data (`1.5 / min_pairwise_distance`) so it works across datasets with different coordinate scales. This changes only the raw probability values, not significance or ranks.
 - Container builds install the latest package versions unless versions are pinned in the `.def` files, so rebuilt images may differ slightly from the ones used for the manuscript.
-**To do: Have to add the version for the last point**
+**TODO: add versions to .def**
