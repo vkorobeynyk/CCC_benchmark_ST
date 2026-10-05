@@ -8,6 +8,17 @@ This repository is the spatial part of a two-part benchmark. The single-cell par
 
 ---
 
+## Contact
+
+Vladyslav Korobeynyk, HIFO / DMLS, University of Zurich (Jessberger lab / Mark D. Robinson lab)
+Questions and bug reports: please open a [GitHub issue](https://github.com/vkorobeynyk/CCC_benchmark_ST/issues).
+
+## Generative AI statement
+Generative AI was used throughout this entire benchmark to make code nicer to read and more efficient. The entire logic of the benchmark was created by myself and I assume responsability of the content within this repo.
+
+## Citation 
+<!-- TODO: add manuscript reference / preprint link -->
+
 ## Methods benchmarked
 
 | Method | Language | Container | Spatially aware |
@@ -223,11 +234,3 @@ data/processed/<strategy>/<dataset>/ # processed counts, edgeR estimates, QC and
 - **CellChat** sets `scale.distance` from the data (`1.5 / min_pairwise_distance`) so it works across datasets with different coordinate scales. This changes only the raw probability values, not significance or ranks.
 - Container builds install the latest package versions unless versions are pinned in the `.def` files, so rebuilt images may differ slightly from the ones used for the manuscript.
 **To do: Have to add the version for the last point**
-
-## Citation
-
-<!-- TODO: add manuscript reference / preprint link -->
-
-## Contact
-
-Vladyslav Korobeynyk, HIFO / DMLS, University of Zurich (Jessberger lab / Mark D. Robinson lab)
