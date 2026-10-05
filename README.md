@@ -6,6 +6,7 @@ Real spatial datasets are **semi-simulated**: a known ligand-receptor (LR) signa
 
 This repository is the spatial part of a two-part benchmark. The single-cell part lives in the `CCC_benchmark` repository.
 
+The data folder used in the benchmark, along with the output folder can be found in ................
 ---
 
 ## Contact
