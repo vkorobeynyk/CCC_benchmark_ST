@@ -1,7 +1,10 @@
 *.ipynb
 file.png
 Rplots.pdf
-data
+data/*
+!data/LR_database.tsv
+!data/InfoAbout_LR_database.txt
+!data/LR_database_entirecellhponedb.tsv
 output
 log
 pdf_to_png.sh

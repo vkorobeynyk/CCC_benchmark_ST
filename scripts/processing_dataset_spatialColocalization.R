@@ -104,7 +104,7 @@ counts = counts[rowSums(counts) != 0 & rowSums(counts != 0) > 10, ]
 # ==============================================================================
 
 set.seed(1)
-if (dataset == "Visium_HD_HPC") {cells = read.csv("data/Visium_HD_HPC/DG_cells.csv") %>% pull(Cell_ID)
+if (dataset == "Visium_HD_HPC") {cells = read.csv("data/Visium_HD_HPC/selected_cells.csv") %>% pull(Cell_ID)
 } else if (dataset == "MERFISH_mColon") {cells = read.csv("data/MERFISH_mColon/selected_cells.csv") %>% pull(Cell_ID)
 } else if (dataset == "CosMx_HFC") {cells = read.csv("data/CosMx_HFC/selected_cells.csv") %>% pull(Cell_ID)
 }

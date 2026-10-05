@@ -13,6 +13,6 @@ module load intel
 
 ./fix_indentation.sh Snakefile
 ./fix_indentation.sh config.yaml
-snakemake --jobs 28 --rerun-incomplete --use-singularity --singularity-args '--bind /home/vkorob/scratch/CCC_benchmark_ST_afterLLM:/home/vkorob/scratch/CCC_benchmark_ST_afterLLM' --profile slurm "$@"
+snakemake --jobs 28 --rerun-incomplete --use-singularity --singularity-args '--bind /home/vkorob/scratch/CCC_benchmark_ST:/home/vkorob/scratch/CCC_benchmark_ST' --profile slurm "$@"
 
 

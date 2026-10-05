@@ -1,0 +1,58 @@
+# Ligand-Receptor Database Curation
+
+This document describes the curation process for the interaction database used in the benchmark.
+
+## Source Data
+The database is derived from **CellPhoneDB**, formatted according to LIANA-py standards (https://github.com/saezlab/liana-py/issues/60)). The original version contained 1,878 entries.
+
+## Processing and Filtering
+To ensure method compatibility and technical stability, the following steps were performed:
+
+*   **Self-Interaction Removal:** Entries where the ligand and receptor are the same gene were excluded.
+*   **Technical Cleaning:** Interactions containing dashes (e.g., `HLA-E`) were removed (8 cases total) to prevent errors in downstream tools.
+*   **CellChat Compatibility:** The database was subsetted to include only interactions present in `CellChatDB.human`.
+*   **Randomization:** Rows were reshuffled because the simulation framework selects LR pairs sequentially by index.
+
+## Subunit Nomenclature
+Complexes are represented using the `L_R1_R2_R3` format (e.g., a receptor with three subunits is `R1_R2_R3`). In the semi-simulation, signal is added to every subunit of the complex.
+
+## Code
+library(stringr)
+library(dplyr)
+library(magrittr)
+library(CellChat)
+
+set.seed(1)
+
+# Load raw database
+LR_database = read.table("data/LR_database_entirecellhponedb.tsv", header = TRUE)
+
+# Filtering and sampling
+LR_database = LR_database %>%
+  filter(!grepl("-", ligand) & !grepl("-", receptor)) %>%
+  filter(ligand != receptor) %>%
+  slice_sample(prop = 1) %>%
+  mutate(ligand_receptor = str_c(ligand, "_", receptor))
+
+# Subset for CellChat compatibility
+CellChatDB = CellChatDB.human
+LR_database = LR_database[LR_database$ligand_receptor %in% CellChatDB$interaction$interaction_name, ]
+
+# Function to standardize gene order for complex subunits
+fix_gene_order = function(genes) {
+  sapply(genes, function(x) {
+    parts = strsplit(x, "_")[[1]]
+    if(length(parts) == 2) {
+      return(str_c(parts[2], "_", parts[1])) 
+    } else {
+      return(x)
+    }
+  })
+}
+
+# Apply gene order fix and save
+LR_database$receptor = fix_gene_order(LR_database$receptor)
+LR_database$ligand = fix_gene_order(LR_database$ligand)
+LR_database$ligand_receptor = str_c(LR_database$ligand, "_", LR_database$receptor)
+
+write.table(LR_database, "data/LR_database.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
