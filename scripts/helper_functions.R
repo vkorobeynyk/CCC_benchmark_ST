@@ -335,8 +335,7 @@ compute_diagnostic_plots = function(counts, master_lst, metadata, PCE_Sender_tar
       ggplot(df_plot, aes(x = original_counts, y = avelogcpm, color = is_LR)) +
       geom_point(size = 0.5) +
       scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black")) +
-      ggtitle(paste0("PCE_Sender = ", PCE_Sender_target, ", PCE_Receiver = ", PCE_Receiver_target,
-                     " | Dataset = ", dataset, " | CT = ", paste(CT_toPlot, collapse = " "))) +
+      ggtitle(dataset, subtitle = paste0("PCE_S: ", PCE_Sender_target, " | PCE_R: ", PCE_Receiver_target)) +
       xlab("aveLogCPM (Original)") +
       ylab("aveLogCPM (Inflated)") +
       theme_light() +

@@ -105,8 +105,9 @@ make_f1_vs_coverage_plot = function(df, x_var, extra_styling = FALSE)
   p = ggplot(df, aes(x = .data[[x_var]], y = f1score, color = method, linetype = AcountsSpatialDistance)) +
     geom_point(size = 0.25) +
     geom_smooth(se = FALSE, span = 0.5) +
-    facet_wrap(~ radius_param_index) +
-    ggtitle("F1score faceted by L") +
+    facet_wrap(~ radius_param_index,
+               labeller = as_labeller(scenario_labels)) +
+    ggtitle("F1score faceted by radius") +
     scale_linetype_manual(values = c("FALSE" = "dashed", "TRUE" = "solid")) +
     theme_bw()
   
@@ -114,7 +115,7 @@ make_f1_vs_coverage_plot = function(df, x_var, extra_styling = FALSE)
     p = p +
       theme(legend.key.width = unit(1.5, "cm")) +
       guides(linetype = guide_legend(override.aes = list(linewidth = 0.5))) +
-      scale_color_viridis_d(option = "D", name = "Methods")
+      scale_color_manual(values = method_cols, name = "Methods")
   }
   return(p)
 }
@@ -124,7 +125,7 @@ make_faceted_pce_heatmap = function(df, fill_var, fill_label)
 {
   ggplot(df, aes(x = factor(PCE_Sender), y = factor(PCE_Receiver), fill = .data[[fill_var]])) +
     geom_tile() +
-    facet_grid(radius_param_index ~ method, labeller = label_both) +
+    facet_grid(radius_param_index ~ method, labeller = labeller(radius_param_index = scenario_labels, method = label_both))
     scale_fill_viridis_c(option = "magma", limits = c(0, 1)) + # 'magma' is great for seeing F1 hotspots
     theme_minimal() +
     theme(
@@ -178,6 +179,14 @@ dir.create(path_results_dir, recursive = TRUE, showWarnings = FALSE)
 metric_results = readRDS(file.path(path_output_dir, "final_scores.RDS"))
 
 config = yaml::read_yaml("config.yaml")
+
+# set colors
+method_cols = setNames(scales::hue_pal()(8),
+                       c("cellchat", "cellphonedbv5", "lianaP_morans", "mistyR",
+                         "NICHES", "seurat_wilcoxon", "spatialdm", "stlearn"))
+
+# replace nomenclature for radius with scenarions
+scenario_labels = c(`0` = "negative", `1` = "optimal", `2` = "extended")
 
 methods = config$methods %>% unlist
 datasets = config$datasets %>% unlist
@@ -289,7 +298,7 @@ for (dataset in datasets)
             geom_density() +
             geom_vline(data = mu, aes(xintercept = grp.mean, color = variable),
                        linetype = "dashed") +
-            ggtitle(paste0("Count density | PCE_Sender:", x["PCE_Sender"], " PCE_Receiver:", x["PCE_Receiver"], " gene:", gene))  +
+            ggtitle(gene, subtitle = paste0("PCE_S: ", x["PCE_Sender"], " | PCE_R: ", x["PCE_Receiver"])) +
             theme_light() +
             theme(
               plot.title   = element_text(size = 10),
@@ -658,7 +667,8 @@ for (dataset in datasets)
   N_interactions_f1score_plot = ggplot(tmp_df_long, aes(x = average_cells_perSender_seen_byMethod, y = value, color = method)) +
     geom_point(size = 1, alpha = 0.6) +
     geom_smooth(se = FALSE, span = 0.5, size = 0.8) +
-    facet_grid(metric ~ radius_param_index, scales = "free_y", labeller = labeller(radius_param_index = label_both)) +
+    scale_color_manual(values = method_cols) +
+    facet_grid(metric ~ radius_param_index, scales = "free_y", labeller = labeller(radius_param_index = scenario_labels)) +
     scale_y_log10() +
     labs(
       x = "Mean_neighborhood_size",
@@ -693,9 +703,10 @@ for (dataset in datasets)
               inherit.aes = FALSE, hjust = 1.05, vjust = -0.6, size = 4.2, fontface = "bold", color = "grey20") +
     scale_x_log10(breaks = rank_breaks, labels = scales::label_number(big.mark = "")) +
     scale_linetype_manual(values = c("TRUE" = "solid", "FALSE" = "dashed"), guide = "none") +
+    scale_fill_manual(values = method_cols) +
     theme_bw() +
     ggtitle("rank and detection rate for every method in retrieving inflated LR") +
-    facet_wrap(~ radius_param_index)
+    facet_wrap(~ radius_param_index, labeller = as_labeller(scenario_labels))
   
   # ------------------------------------------------------------------
   # precision/recall plots across indexLR
