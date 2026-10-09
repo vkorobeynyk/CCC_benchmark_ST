@@ -123,6 +123,13 @@ LRdata_df["importances"] = LRdata_df["importances"].abs()
 LRdata_df["statistics"] = LRdata_df["importances"] 
 LRdata_df = LRdata_df.sort_values("statistics", ascending=False)  # descending: higher importance first
 LRdata_df["ligand_receptor"] = LRdata_df["predictor"] + "_" + LRdata_df["target"] 
+
+# LR-MISTy models every receptor from all ligands in the resource, so its output
+# contains all ligand x receptor combinations. Keep only pairs present in the resource
+# so mistyR is comparable to the other methods.
+db_pairs = set(LR_database["ligand"] + "_" + LR_database["receptor"])
+LRdata_df = LRdata_df[LRdata_df["ligand_receptor"].isin(db_pairs)]
+
 LRdata_df["significant"] = LRdata_df["importances"] > 2  # importance of 2 was used in the paper as a filtering criterion
 LRdata_df["ratio_Receiver_seen_byMethod"] = ratio_Receiver_seen_byMethod
 LRdata_df["average_cells_perSender_seen_byMethod"] = average_cells_perSender_seen_byMethod

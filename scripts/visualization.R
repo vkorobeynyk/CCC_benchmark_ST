@@ -125,7 +125,7 @@ make_faceted_pce_heatmap = function(df, fill_var, fill_label)
 {
   ggplot(df, aes(x = factor(PCE_Sender), y = factor(PCE_Receiver), fill = .data[[fill_var]])) +
     geom_tile() +
-    facet_grid(radius_param_index ~ method, labeller = labeller(radius_param_index = scenario_labels, method = label_both))
+    facet_grid(radius_param_index ~ method, labeller = labeller(radius_param_index = scenario_labels, method = label_both)) +
     scale_fill_viridis_c(option = "magma", limits = c(0, 1)) + # 'magma' is great for seeing F1 hotspots
     theme_minimal() +
     theme(
@@ -652,15 +652,15 @@ for (dataset in datasets)
     mutate(is_spatial_aware = !method %in% c("seurat_wilcoxon", "cellphonedbv5"))
   
   
-  # Reshape data so FP and f1score are in a single column
+  # Reshape data so N and f1score are in a single column
   tmp_df_long = tmp_df %>%
     pivot_longer(
-      cols = c(FP, f1score),
+      cols = c(N, f1score),
       names_to = "metric",
       values_to = "value"
     ) %>%
     mutate(metric = case_when(
-      metric == "FP" ~ "Number of Interactions Retrieved",
+      metric == "N" ~ "Number of Interactions Retrieved",
       metric == "f1score" ~ "F1-Score"
     ))
   
@@ -985,12 +985,12 @@ if (strategy == "spatialScattering")
     combined_data = bind_rows(data_across_methods_scattering, data_across_methods_colocalization)
     
     long_data = combined_data %>%
-      pivot_longer(cols = c(recall, precision), # Change to precision or false_positives based on your columns
+      pivot_longer(cols = c(recall, N),
                    names_to = "Metric",
                    values_to = "Value") %>%
       mutate(Metric = recode(Metric,
                              "recall" = "Recall",
-                             "precision" = "Precision"))
+                             "N" = "Interactions retrieved"))
     
     return(long_data)
   }) %>% setNames(datasets)
@@ -998,33 +998,37 @@ if (strategy == "spatialScattering")
   
   long_data_plot = do.call(rbind, out)
   
-  # 1. Pool data across your 3 datasets carefully preserving "Metric"
-  pooled_data = long_data_plot %>%
-    # Force Metric to be exactly what ggplot expects
-    dplyr::group_by(method, condition, Metric, PCE_Sender, PCE_Receiver, radius_param_index) %>%
-    dplyr::summarise(Value = mean(Value, na.rm = TRUE), .groups = "drop")
+  # 1. Summarise across datasets and parameter combinations (mean +- SD per method/condition)
+  summary_data = long_data_plot %>%
+    dplyr::group_by(method, condition, Metric) %>%
+    dplyr::summarise(mean = mean(Value, na.rm = TRUE),
+                     sd = sd(Value, na.rm = TRUE),
+                     .groups = "drop") %>%
+    dplyr::mutate(
+      lower = pmax(mean - sd, 0),
+      upper = ifelse(Metric == "Recall", pmin(mean + sd, 1), mean + sd),
+      # interaction counts span several orders of magnitude -> log10(x + 1)
+      across(c(mean, lower, upper),
+             ~ ifelse(Metric == "Interactions retrieved", log10(.x + 1), .x)),
+      Metric = recode(Metric, "Interactions retrieved" = "Interactions retrieved (log10 N+1)"),
+      Metric = factor(Metric, levels = c("Interactions retrieved (log10 N+1)", "Recall"))
+    )
   
-  # 2. Run the simplified plot
-  p = ggplot(pooled_data, aes(x = method, y = Value, color = condition)) +
-    geom_boxplot(
-      position = position_dodge(width = 0.7),
-      width = 0.6,
-      alpha = 0.25, 
-      outlier.shape = 21,
-      outlier.size = 1.5,
-      linewidth = 0.6
-    ) +
-    
-    # This matches the capital "Metric" column from above
+  # 2. Bar plot in the same style as the previous boxplot
+  p = ggplot(summary_data, aes(x = method, y = mean, color = condition, fill = condition)) +
+    geom_col(position = position_dodge(width = 0.7), width = 0.6, alpha = 0.25, linewidth = 0.6) +
+    geom_errorbar(aes(ymin = lower, ymax = upper),
+                  position = position_dodge(width = 0.7), width = 0.25, linewidth = 0.5) +
     facet_wrap(~Metric, scales = "free_y", nrow = 2) +
-    
     scale_color_manual(values = c("#4292C6", "#EF3B2C")) +
+    scale_fill_manual(values = c("#4292C6", "#EF3B2C")) +
     labs(
       title = "Benchmark performance profile: Scattering vs Colocalization",
       subtitle = "Aggregated across spatial datasets (CosMx, MERFISH, Visium_HD)",
       x = "Inference Method",
       y = "Score",
-      color = "Condition"
+      color = "Condition",
+      fill = "Condition"
     ) +
     theme_bw() +
     theme(
