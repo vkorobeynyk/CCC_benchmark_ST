@@ -181,7 +181,7 @@ metric_results = readRDS(file.path(path_output_dir, "final_scores.RDS"))
 config = yaml::read_yaml("config.yaml")
 
 # set colors
-method_cols = setNames(scales::hue_pal()(8),
+method_cols = setNames(viridisLite::viridis(8, option = "D"),
                        c("cellchat", "cellphonedbv5", "lianaP_morans", "mistyR",
                          "NICHES", "seurat_wilcoxon", "spatialdm", "stlearn"))
 
@@ -561,7 +561,7 @@ for (dataset in datasets)
   
   # Create a 'Combination' label for columns
   tmp_df %<>%
-    mutate(Param_Comb = paste0("PCE_S:", PCE_Sender, "\nPCE_R:", PCE_Receiver, "\nradius:", radius_param_index)) %>%
+    mutate(Param_Comb = paste0("PCE_S:", PCE_Sender, "\nPCE_R:", PCE_Receiver, "\nradius:", scenario_labels[as.character(radius_param_index)])) %>%
     select(method, Param_Comb, recall) %>%
     pivot_wider(names_from = Param_Comb, values_from = recall) %>%
     tibble::column_to_rownames("method") %>%
@@ -581,7 +581,7 @@ for (dataset in datasets)
   
   col_meta$PCE_S  = factor(col_meta$PCE_S,  levels = str_sort(unique(col_meta$PCE_S),  numeric = TRUE))
   col_meta$PCE_R  = factor(col_meta$PCE_R,  levels = str_sort(unique(col_meta$PCE_R),  numeric = TRUE))
-  col_meta$radius = factor(col_meta$radius, levels = str_sort(unique(col_meta$radius), numeric = TRUE))
+  col_meta$radius = factor(col_meta$radius, levels = scenario_labels)
   
   
   unique_pce_s = unique(col_meta$PCE_S)
@@ -877,7 +877,7 @@ product_f1score_plot = ggplot(plot_data, aes(x = Snd_Rcv_Product, y = f1score,
   
   facet_grid(dataset ~ radius_param_index, scales = "free_x") +
   
-  scale_color_viridis_d(option = "D", name = "Methods") +
+  scale_color_manual(values = method_cols, name = "Methods") +
   scale_linetype_manual(values = line_types, name = "Methods") +
   
   # Keep the uniform linewidths as configured
