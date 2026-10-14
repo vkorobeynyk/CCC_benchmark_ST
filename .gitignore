@@ -7,7 +7,10 @@ data/*
 !data/LR_database_entirecellhponedb.tsv
 output
 log
-pdf_to_png.sh
 scripts/.ipynb_checkpoints
 sing_container/*.sif
-
+results_cpdbv5_ToDelete/
+.cache/
+.fontconfig/
+.snakemake/
+output_individual_images

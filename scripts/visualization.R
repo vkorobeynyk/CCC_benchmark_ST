@@ -976,7 +976,6 @@ if (strategy == "spatialScattering")
     
     data_across_methods_scattering = statistics_results_lst_recallprecision_scattering[[dataset]] %>% do.call(rbind, .)
     data_across_methods_colocalization = statistics_results_lst_recallprecision_colocalization[[dataset]] %>% do.call(rbind, .)
-    # Assuming both dataframes have columns: "method", "recall", and "precision"
     data_across_methods_scattering$condition = "Scattering"
     data_across_methods_colocalization$condition = "Colocalization"
     data_across_methods_scattering$dataset = dataset
