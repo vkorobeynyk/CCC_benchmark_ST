@@ -107,7 +107,7 @@ make_f1_vs_coverage_plot = function(df, x_var, extra_styling = FALSE)
     geom_smooth(se = FALSE, span = 0.5) +
     facet_wrap(~ radius_param_index,
                labeller = as_labeller(scenario_labels)) +
-    ggtitle("F1score faceted by radius") +
+    ggtitle("F1score faceted by scenario") +
     scale_linetype_manual(values = c("FALSE" = "dashed", "TRUE" = "solid")) +
     theme_bw()
   
@@ -134,7 +134,7 @@ make_faceted_pce_heatmap = function(df, fill_var, fill_label)
       panel.spacing = unit(0.5, "lines")
     ) +
     labs(
-      title = "Comparing methods across radius and PCE_Sender/PCE_Receiver thresholds",
+      title = "Comparing methods across scenarios and PCE_Sender/PCE_Receiver thresholds",
       x = "PCE_Sender",
       y = "PCE_Receiver",
       fill = fill_label
@@ -185,7 +185,7 @@ method_cols = setNames(viridisLite::viridis(8, option = "D"),
                        c("cellchat", "cellphonedbv5", "lianaP_morans", "mistyR",
                          "NICHES", "seurat_wilcoxon", "spatialdm", "stlearn"))
 
-# replace nomenclature for radius with scenarions
+# replace nomenclature for radius with scenarios
 scenario_labels = c(`0` = "negative", `1` = "optimal", `2` = "extended")
 
 methods = config$methods %>% unlist
@@ -561,7 +561,7 @@ for (dataset in datasets)
   
   # Create a 'Combination' label for columns
   tmp_df %<>%
-    mutate(Param_Comb = paste0("PCE_S:", PCE_Sender, "\nPCE_R:", PCE_Receiver, "\nradius:", scenario_labels[as.character(radius_param_index)])) %>%
+    mutate(Param_Comb = paste0("PCE_S:", PCE_Sender, "\nPCE_R:", PCE_Receiver, "\n", scenario_labels[as.character(radius_param_index)])) %>%
     select(method, Param_Comb, recall) %>%
     pivot_wider(names_from = Param_Comb, values_from = recall) %>%
     tibble::column_to_rownames("method") %>%
@@ -571,6 +571,8 @@ for (dataset in datasets)
   pce_s_num = as.numeric(str_extract(colnames(tmp_df), "(?<=PCE_S:)[0-9.]+"))
   pce_r_num = as.numeric(str_extract(colnames(tmp_df), "(?<=PCE_R:)[0-9.]+"))
   tmp_df = tmp_df[, order(pce_s_num, pce_r_num)]
+  
+  heatmap2_matrix = tmp_df #save ordering for heatmaps 2-4
   
   # Extract metadata for annotations (the labels at the top).
   # This keeps the PCE_Sender and PCE_Receiver values linked to the columns
@@ -618,11 +620,13 @@ for (dataset in datasets)
   tmp_df %<>%
     mutate(average_cells_perSender_seen_byMethod = as.numeric(average_cells_perSender_seen_byMethod),
            average_cells_perSender_seen_byMethod = ifelse(method %in% c("seurat_wilcoxon", "cellphonedbv5"), NA, average_cells_perSender_seen_byMethod),
-           Param_Comb = paste0("PCE_S:", PCE_Sender, "\nPCE_R:", PCE_Receiver, "\nradius:", radius_param_index)) %>%
+           Param_Comb = paste0("PCE_S:", PCE_Sender, "\nPCE_R:", PCE_Receiver, "\n", scenario_labels[as.character(radius_param_index)])) %>%
     select(method, Param_Comb, average_cells_perSender_seen_byMethod) %>%
     pivot_wider(names_from = Param_Comb, values_from = average_cells_perSender_seen_byMethod) %>%
     tibble::column_to_rownames("method") %>%
     as.matrix()
+  # reorder columns
+  tmp_df = tmp_df[, colnames(heatmap2_matrix)]
   
   heatmap3 = make_pce_heatmap(tmp_df, name = "Mean_neighborhood_size", col_split = col_meta$radius, top_ann = top_ann,
                               target_width_mm = 300, target_height_mm = 30,
@@ -633,11 +637,14 @@ for (dataset in datasets)
   
   tmp_df %<>%
     mutate(ratio_Receiver_seen_byMethod = ifelse(method %in% c("seurat_wilcoxon", "cellphonedbv5"), NA, ratio_Receiver_seen_byMethod),
-           Param_Comb = paste0("PCE_S:", PCE_Sender, "\nPCE_R:", PCE_Receiver, "\nradius:", radius_param_index)) %>%
+           Param_Comb = paste0("PCE_S:", PCE_Sender, "\nPCE_R:", PCE_Receiver, "\n", scenario_labels[as.character(radius_param_index)])) %>%
     select(method, Param_Comb, ratio_Receiver_seen_byMethod) %>%
     pivot_wider(names_from = Param_Comb, values_from = ratio_Receiver_seen_byMethod) %>%
     tibble::column_to_rownames("method") %>%
     as.matrix()
+  
+  # reorder columns
+  tmp_df = tmp_df[, colnames(heatmap2_matrix)]
   
   heatmap4 = make_pce_heatmap(tmp_df, name = "receiver_coverage_pct", col_split = col_meta$radius, top_ann = top_ann,
                               target_width_mm = 300, target_height_mm = 30,
@@ -852,7 +859,7 @@ plot_data = tmp_df_long %>%
     
     # Step 3: Format faceting variables as clean factors
     dataset = factor(dataset),
-    radius_param_index = factor(paste0("radius_param:", radius_param_index)),
+    radius_param_index = factor(scenario_labels[as.character(radius_param_index)], levels = scenario_labels),
     
     # Optional: Build your Boolean metadata flag for spatial awareness
     AccountsSpatialDistance = !method %in% c("cellphonedbv5", "seurat_wilcoxon")
@@ -888,8 +895,8 @@ product_f1score_plot = ggplot(plot_data, aes(x = Snd_Rcv_Product, y = f1score,
   
   labs(
     x = "Combined parameter density (Sender × Receiver Product Scale)",
-    y = "F1score Value",
-    title = "Smoothed f1score trends across parameter"
+    y = "F1score",
+    title = "Smoothed F1-score across signal abundance (PCE_S × PCE_R)"
   ) +
   theme_bw() +
   theme(
