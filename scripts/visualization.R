@@ -150,9 +150,9 @@ make_indexLR_ridge_plot = function(df, x_var, x_label)
     scale_x_continuous(limits = c(-0.05, 1.05), breaks = c(0, 0.5, 1)) +
     theme_bw() +
     labs(
-      title = "Method performance across different indexLR",
+      title = "Method performance across simulated LR pairs (indexLR)",
       x = x_label,
-      y = "PC Snd/Rcv parameters"
+      y = "PCE_Sender / PCE_Receiver combination"
     ) +
     theme(
       axis.text.y = element_text(size = 8),
@@ -601,7 +601,7 @@ for (dataset in datasets)
       h = c(0.05, 0.05) # fine tude KDE bandwidth as some methods have very low variance and density estimation doesnt work
     ) +
     facet_wrap(~ method, ncol = 4) +
-    labs(title = "Independent 2D Density per method")
+    labs(title = "Precision vs. recall per method (2D density across all parameter combinations)")
   
   # ------------------------------------------------------------------
   # F1 score plots
@@ -612,16 +612,17 @@ for (dataset in datasets)
   d = tmp_df %>%
     group_by(method, radius_param_index) %>%
     summarise_at(vars(f1score), mean) %>%
-    mutate(f1score = round(f1score, 3))
-  
-  heatmap1 = ggplot(d, aes(method, radius_param_index, fill = f1score)) +
+    mutate(f1score = round(f1score, 3)) %>%
+    dplyr::mutate(scenario = factor(scenario_labels[as.character(radius_param_index)], levels = scenario_labels))
+
+  heatmap1 = ggplot(d, aes(method, scenario, fill = f1score)) +
     geom_tile(color = "black") +
     geom_text(aes(label = f1score), color = "black") +
     scale_fill_gradient(low = "white", high = "red") +
     theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
-    ggtitle("heatmap of f1score according to index l (the value of l param can be seen in config.yaml)") +
-    scale_y_continuous(breaks = radius_param_index) +
-    ylab("Index of l parameter")
+    ggtitle("Mean F1-score per method and spatial scenario") +
+    xlab("Method") +
+    ylab("Scenario")
   
   p3 = make_f1_vs_coverage_plot(tmp_df, "pct_SenderCells_expressing_L", extra_styling = TRUE)
   p4 = make_f1_vs_coverage_plot(tmp_df, "N_SenderCells_expressing_L", extra_styling = TRUE)
@@ -789,7 +790,7 @@ for (dataset in datasets)
     scale_linetype_manual(values = c("TRUE" = "solid", "FALSE" = "dashed"), guide = "none") +
     scale_fill_manual(values = method_cols) +
     theme_bw() +
-    ggtitle("rank and detection rate for every method in retrieving inflated LR") +
+    ggtitle("Rank and detection rate of the simulated LR pair per method") +
     facet_wrap(~ radius_param_index, labeller = as_labeller(scenario_labels))
   
   # ------------------------------------------------------------------

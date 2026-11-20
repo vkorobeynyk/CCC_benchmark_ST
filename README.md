@@ -42,6 +42,10 @@ This project is released under the [GNU General Public License v3.0](LICENSE).
 
 Seurat Wilcoxon has no spatial information. It is the baseline for measuring how much the spatial methods gain from using space. `Table2_spatial_Cell_Communication_Summary.pdf` (made by `generate_table.R`) summarises how each method scores interactions and tests significance.
 
+All methods test the same set of LR pairs (`data/LR_database.tsv`, see [Input data](#2-input-data)). Most methods read that file directly. CellChat and SpatialDM use their own CellChatDB lists, restricted to the same pairs. CellPhoneDB v5 runs on its own database, so its output is filtered to the pairs in `LR_database.tsv` (matched by gene set); because each interaction is tested separately, this is equivalent to restricting its database. MISTy's output is likewise restricted to `LR_database.tsv` pairs, since LR-MISTy otherwise reports every ligand × receptor combination.
+
+Methods with random permutations use fixed seeds (LIANA+ Moran's I `seed=1`, CellPhoneDB `debug_seed=42`, `np.random.seed(1)` before SpatialDM's permutation test and before stLearn's cell-type permutation test), so that baseline and semi-simulated runs differ only by the simulated signal.
+
 ## Datasets
 
 Set in `config.yaml` → `datasets`:
@@ -119,6 +123,7 @@ Every method is also run on the original processed data, without semi-simulation
   - **related**: not significant in the baseline, but shares a ligand, receptor or complex subunit with the simulated pair; not counted as FP.
   - **FP**: not significant in the baseline and shares no gene with the simulated pair, i.e. a spurious hit caused by the simulation.
 - **Precision, recall, F1** are computed from TP, FN and this FP, together with the **rank** of the simulated pair.
+- **Matching by gene set:** methods do not all write complex subunits in the same order (e.g. `WNT1_LRP5_FZD1` in `LR_database.tsv` is `WNT1_FZD1_LRP5` in CellChat and SpatialDM output; CellPhoneDB names complexes by its deconvoluted gene list). All comparisons (simulated pair, baseline, every method output) therefore use an order-independent key: the genes of an interaction sorted alphabetically. Only the exact same set of genes counts as a match.
 - Additional columns per run:
   - `n_additional`: all significant non-simulated interactions (`n_pre_existing + n_related + FP`); the FP definition before baseline runs were added
   - `n_pre_existing`, `n_related`: sizes of the groups above
