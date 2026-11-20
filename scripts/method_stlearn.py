@@ -109,13 +109,14 @@ st.tl.cci.adj_pvals(adata, correct_axis='spot', pval_adj_cutoff=0.05, adj_method
 
 # Celltype enrichment and permutation: summarizes LR pairs between annotated
 # celltypes and tests whether those connections occur more often than expected.
+np.random.seed(1)
 st.tl.cci.run_cci(adata, 'Celltype',
                    min_spots=0,
                    spot_mixtures=False,
 
                    cell_prop_cutoff=0,
                    sig_spots=True,
-                   n_perms=10,
+                   n_perms=25,
                    n_cpus=args.n_cpus
                    )
 

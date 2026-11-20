@@ -94,6 +94,7 @@ plt.savefig(plot_neighbors_path, dpi=200)
 # ==============================================================================
 
 sdm.extract_lr(adata, 'human', min_cell=0)  # extract LR pairs (uses CellChatDB by default)
+np.random.seed(1)
 sdm.spatialdm_global(adata, n_perm=250, specified_ind=None, method='both', nproc=1)
 sdm.sig_pairs(adata, method='permutation', fdr=True, threshold=0.1)
 
