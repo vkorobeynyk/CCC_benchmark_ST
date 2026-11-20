@@ -101,7 +101,12 @@ def gene_set_key(x):
     return "_".join(sorted(str(x).upper().split("_")))
 
 db_keys = set(lr_db["ligand_receptor"].map(gene_set_key))
-LRdata_df = LRdata_df[LRdata_df["ligand_receptor"].map(gene_set_key).isin(db_keys)]
+LRdata_df = LRdata_df[LRdata_df["ligand_receptor"].map(gene_set_key).isin(db_keys)].copy()
+
+# Rename every interaction to its LR_database.tsv name, so outputs of all
+# methods use the same names (CellPhoneDB's gene order for complexes differs).
+lr_name_lookup = dict(zip(lr_db["ligand_receptor"].map(gene_set_key), lr_db["ligand_receptor"]))
+LRdata_df["ligand_receptor"] = LRdata_df["ligand_receptor"].map(lambda x: lr_name_lookup.get(gene_set_key(x), x))
 
 # metadata columns (this method doesn't use a spatial radius, so these are
 # fixed placeholders rather than computed values, unlike the spatial methods)

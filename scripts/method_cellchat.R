@@ -43,6 +43,19 @@ radius = config[["radius_param"]][["CellChat"]][[dataset]][radius_index] %>% unl
 LR_database_path = snakemake@params[["LR_database"]]
 LR_database = read.table(LR_database_path, row.names = 1)
 
+# CellChat reports interactions with CellChatDB names, whose complex subunits
+# can be in a different order than in LR_database.tsv (e.g. WNT4_FZD8_LRP6 vs
+# WNT4_LRP6_FZD8). Lookup to rename outputs to their LR_database.tsv name
+# (matched by gene set), built here before LR_database is modified below.
+gene_set_key = function(x) {
+  vapply(str_split(toupper(as.character(x)), "_"), function(g) paste(sort(g), collapse = "_"), character(1))
+}
+lr_name_lookup = setNames(LR_database$ligand_receptor, gene_set_key(LR_database$ligand_receptor))
+to_LR_name = function(x) {
+  out = unname(lr_name_lookup[gene_set_key(x)])
+  ifelse(is.na(out), as.character(x), out)   # keep the original name if not in LR_database
+}
+
 # ==============================================================================
 # STEP 1: load data
 # ==============================================================================
@@ -235,7 +248,7 @@ if (nrow(cellchat@LR$LRsig) == 0)
   # save data
   if (nrow(df.net) != 0)
   {
-    write.table(data.frame(ligand_receptor = df.net$interaction_name, significant = df.net$significant, statistics = df.net$prob,
+    write.table(data.frame(ligand_receptor = to_LR_name(df.net$interaction_name), significant = df.net$significant, statistics = df.net$prob,
                            ratio_Receiver_seen_byMethod = ratio_Receiver_seen_byMethod,
                            average_cells_perSender_seen_byMethod = average_cells_perSender_seen_byMethod), significant_interactions_path,
                 sep = "\t")

@@ -40,6 +40,7 @@ with open("config.yaml", "r") as stream:
 
 radius_index = snakemake.params["radius_index"]
 dataset = snakemake.params["dataset"]
+LR_database_path = snakemake.params["LR_database"]
 l = config["radius_param"]["spatialdm"][dataset][np.int64(radius_index)]
 
 adata.obsm["spatial"] = np.array([cm["x"], cm["y"]]).T
@@ -141,6 +142,18 @@ LRdata_df["significant"] = LRdata_df["statistics"] < 0.05
 LRdata_df["receptor"] = LRdata_df["Receptor0"] + "_" + LRdata_df["Receptor1"].fillna("")
 LRdata_df["receptor"] = LRdata_df["receptor"].str.rstrip("_")
 LRdata_df["ligand_receptor"] = LRdata_df["ligand"] + "_" + LRdata_df["receptor"]
+
+# SpatialDM writes complex subunits in its own (CellChatDB) order, e.g.
+# SEMA3A_NRP1_PLXNA2 instead of SEMA3A_PLXNA2_NRP1 in LR_database.tsv.
+# Rename every interaction to its LR_database.tsv name (matched by gene set),
+# so outputs of all methods use the same names.
+def gene_set_key(x):
+    return "_".join(sorted(str(x).upper().split("_")))
+
+lr_db = pd.read_csv(LR_database_path, sep=" ")
+lr_name_lookup = dict(zip(lr_db["ligand_receptor"].map(gene_set_key), lr_db["ligand_receptor"]))
+LRdata_df["ligand_receptor"] = LRdata_df["ligand_receptor"].map(lambda x: lr_name_lookup.get(gene_set_key(x), x))
+
 LRdata_df["ratio_Receiver_seen_byMethod"] = ratio_Receiver_seen_byMethod
 LRdata_df["average_cells_perSender_seen_byMethod"] = average_cells_perSender_seen_byMethod
 
