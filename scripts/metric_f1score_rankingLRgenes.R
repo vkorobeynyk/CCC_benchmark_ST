@@ -6,6 +6,14 @@
 # what rank), and computes precision/recall/F1 treating that single
 # simulated pair as ground truth. Results across all combinations are
 # stored in a nested list and saved as output/{strategy}/final_scores.RDS
+#
+# False positives are defined by comparison with the baseline run of the same
+# strategy / dataset / method / radius (no signal added): a non-simulated
+# interaction counts as FP only if it is significant after signal injection,
+# NOT significant in the baseline, and shares no gene with the simulated pair.
+# Interactions already significant without signal (pre-existing) or sharing a
+# gene with the simulated pair (related) are reported separately and not
+# counted as FP. The previous FP definition is kept as n_additional.
 # ============================================================================
 
 suppressMessages({
@@ -55,10 +63,23 @@ for (dataset in datasets)
     simulated_interactions = readRDS(paste0("output/", strategy, "/", dataset, "_semiSimulation_NB/", simulated_interaction_file)) %>%
       .$Sender_Receiver
     
+    # genes (ligand and receptor subunits) of the simulated pair; non-simulated
+    # pairs sharing any of them are "related" and not counted as false positives
+    sim_genes = simulated_interactions %>% str_split("_") %>% unlist %>% unique
+
     for (method in methods)
     {
       # load all output files for every parameter combination, for this method
       data_dir = file.path("output", strategy, dataset, method)
+
+      # baseline runs (no signal added), one per radius_param_index
+      baseline_sig_lst = lapply(radius_param_index, function(r) {
+        read.table(file.path(data_dir, "baseline", paste0("significant_interactions_baseline_l_", r, ".tsv")),
+                   header = T, sep = "\t") %>%
+          filter(as.logical(significant)) %>%
+          pull(ligand_receptor) %>%
+          unique
+      }) %>% setNames(as.character(radius_param_index))
       
       # build the file path for every (PCE_Sender, PCE_Receiver, radius_param_index) combination
       params_grid = expand.grid(indexLR = indexLR, PCE_Sender = PCE_Sender, PCE_Receiver = PCE_Receiver, radius_param_index = radius_param_index) %>%
@@ -117,7 +138,39 @@ for (dataset in datasets)
         }
         
         FN = if (l_r_significant) {0} else {1} # inflated LR was significant -> no false negative
-        
+
+        # ------------------------------------------------------------------
+        # comparison with the baseline run (same radius, no signal added)
+        #   pre_existing - significant also without signal (may be real biology)
+        #   related      - new after injection, shares a gene with the simulated pair
+        #   fp_diff      - new after injection and unrelated -> false positives
+        #   lost         - significant in baseline, not after injection; split into
+        #                  simulated pair / related / unrelated. The semi-simulation
+        #                  wipes the native expression of the simulated genes in
+        #                  Sender/Receiver cells, so simulated/related losses are
+        #                  expected; unrelated losses would indicate a global effect.
+        # The simulated pair is matched with grepl(l_r, ...) as for TP above.
+        # ------------------------------------------------------------------
+        n_additional = FP   # previous FP definition (all non-simulated significant interactions)
+
+        baseline_sig = baseline_sig_lst[[as.character(x[["radius_param_index"]])]]
+        is_related_fun = function(lr) vapply(str_split(lr, "_"), function(g) any(g %in% sim_genes), logical(1))
+
+        significant_lr = unique(significant_interactions$ligand_receptor)
+        non_sim        = significant_lr[!grepl(l_r, significant_lr)]
+        pre_existing   = intersect(non_sim, baseline_sig)
+        new_nonsim     = setdiff(non_sim, baseline_sig)
+        related        = new_nonsim[is_related_fun(new_nonsim)]
+        fp_diff        = new_nonsim[!is_related_fun(new_nonsim)]
+
+        lost           = setdiff(baseline_sig, significant_lr)
+        lost_simulated = lost[grepl(l_r, lost)]
+        lost_nonsim    = lost[!grepl(l_r, lost)]
+        lost_related   = lost_nonsim[is_related_fun(lost_nonsim)]
+        lost_unrelated = lost_nonsim[!is_related_fun(lost_nonsim)]
+
+        FP = length(fp_diff)
+
         if (TP == 0) {
           precision = 0; recall = 0
         } else {
@@ -130,6 +183,14 @@ for (dataset in datasets)
         # store the results for this combination
         df_statistics = data.frame(precision = precision %>% round(3), recall = recall %>% round(3), f1score = f1score %>% round(3),
                                    TP = TP, FN = FN, FP = FP, rank = rank, N = nrow(all_interactions),
+                                   n_additional = n_additional,
+                                   n_pre_existing = length(pre_existing),
+                                   n_related = length(related),
+                                   n_lost = length(lost),
+                                   n_lost_simulated = length(lost_simulated),
+                                   n_lost_related = length(lost_related),
+                                   n_lost_unrelated = length(lost_unrelated),
+                                   n_baseline_significant = length(baseline_sig),
                                    method = method, indexLR = indexLR,
                                    PCE_Sender = x["PCE_Sender"],
                                    PCE_Receiver = x["PCE_Receiver"],

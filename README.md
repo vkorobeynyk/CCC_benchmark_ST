@@ -2,7 +2,7 @@
 
 A reproducible benchmark of **spatial cell-cell communication (CCC) methods** on spatial transcriptomics data.
 
-Real spatial datasets are **semi-simulated**: a known ligand-receptor (LR) signal is planted in chosen Sender and Receiver cells. Each method is then scored on whether it recovers that pair. The workflow is built with [Snakemake](https://snakemake.readthedocs.io/), runs on a SLURM cluster, and runs every step inside a Singularity/Apptainer container.
+Real spatial datasets are **semi-simulated**: the native expression of a known ligand-receptor (LR) pair is replaced by simulated signal in chosen Sender and Receiver cells. Each method is then scored on whether it recovers that pair. Each method is also run on the original data without simulated signal (**baseline**), so interactions caused by the simulation can be separated from those already present in the data. The workflow is built with [Snakemake](https://snakemake.readthedocs.io/), runs on a SLURM cluster, and runs every step inside a Singularity/Apptainer container.
 
 This repository is the spatial part of a two-part benchmark. The single-cell part lives in the companion `CCC_benchmark` repository.
 
@@ -80,7 +80,7 @@ For each dataset, the pipeline:
 
 1. Estimates per-gene mean and dispersion with **edgeR**, using real per-cell offsets.
 2. Takes **one LR pair** from `data/LR_database.tsv` (`indexLR_toSample`). Pairs are simulated one at a time so the already sparse spatial data is not distorted.
-3. Raises ligand counts in some Sender cells and receptor counts in some Receiver cells. New counts are drawn from a negative binomial, `1 + rnbinom(mu = gene_rate · exp(cell_offset), size = 1/dispersion)`. For multi-subunit complexes, every subunit gets the signal.
+3. Replaces the native expression of the pair's genes: the ligand is first set to 0 in all Sender cells and the receptor in all Receiver cells, then re-expressed in the selected cells only. New counts are drawn from a negative binomial, `1 + rnbinom(mu = gene_rate · exp(cell_offset), size = 1/dispersion)`. For multi-subunit complexes, every subunit gets the signal. A fixed seed per parameter combination (`PCE_Sender`, `PCE_Receiver`, `indexLR_toSample`) makes the cell selection and sampling reproducible.
 4. Sets how many cells get the signal with `PCE_Sender` / `PCE_Receiver`:
 
    ```
@@ -102,9 +102,30 @@ Each `(strategy, dataset, method)` combination is run over:
 
 `radius_param` in `config.yaml` sets the neighbourhood size (Euclidean radius or kernel bandwidth) for **each method and dataset**, in that dataset's coordinate units.
 
+### Baseline runs (no simulated signal)
+
+Every method is also run on the original processed data, without semi-simulation (`scripts/processing_baseline.R` and the `*_baseline` rules in the `Snakefile`). Methods infer interactions from the fixed `Celltype` labels (Sender/Receiver), so the baseline does not depend on `PCE_Sender`, `PCE_Receiver` or `indexLR_toSample`. It runs once per **strategy × dataset × radius_param_index × method** (144 runs with the default config).
+
+- The method rules are reused with Snakemake's `use rule ... with:`, so scripts and containers are identical to the semi-simulated runs.
+- `Celltype_updated` is only used by the methods for diagnostic columns (e.g. how many signal-added cells fall within the radius). In the baseline, **all** Sender cells are labelled `Sender_signalAdded` and all Receiver cells `Receiver_signalAdded`, so these diagnostics run without errors. Baseline diagnostic columns are not used downstream.
+
 ### Scoring
 
-`scripts/metric_f1score_rankingLRgenes.R` gathers every method's `significant_interactions_*.tsv` for one strategy. It treats the simulated Sender → Receiver LR pair as ground truth and computes **precision, recall, F1 and the rank** of the true pair. Results are saved to `output/<strategy>/final_scores.RDS`, and `scripts/visualization.R` turns them into the summary figures.
+`scripts/metric_f1score_rankingLRgenes.R` gathers every method's `significant_interactions_*.tsv` for one strategy. It treats the simulated Sender → Receiver LR pair as ground truth and compares each run with the baseline of the same strategy, dataset, method and radius:
+
+- **TP / FN**: whether the simulated pair is called significant.
+- Every other significant interaction falls into exactly one group:
+  - **pre-existing**: also significant in the baseline. Present in the data regardless of the simulation; not counted as FP.
+  - **related**: not significant in the baseline, but shares a ligand, receptor or complex subunit with the simulated pair; not counted as FP.
+  - **FP**: not significant in the baseline and shares no gene with the simulated pair, i.e. a spurious hit caused by the simulation.
+- **Precision, recall, F1** are computed from TP, FN and this FP, together with the **rank** of the simulated pair.
+- Additional columns per run:
+  - `n_additional`: all significant non-simulated interactions (`n_pre_existing + n_related + FP`); the FP definition before baseline runs were added
+  - `n_pre_existing`, `n_related`: sizes of the groups above
+  - `n_lost`: significant in the baseline but not after simulation, split into `n_lost_simulated`, `n_lost_related` and `n_lost_unrelated`. Because the simulation removes the native expression of the simulated genes, simulated and related losses are expected; unrelated losses would indicate a global effect (e.g. normalization or cross-pair scaling).
+  - `n_baseline_significant`: total significant interactions in the baseline run
+
+Results are saved to `output/<strategy>/final_scores.RDS`, and `scripts/visualization.R` turns them into the summary figures. Each `<dataset>_recall_precision_plots.pdf` ends with two baseline-comparison plots per radius scenario: the fate of baseline-significant interactions, and the composition of non-simulated significant interactions (pre-existing / related / FP).
 
 ---
 
@@ -126,8 +147,13 @@ data/<dataset>/{counts,metadata}_<dataset>.tsv
         ▼
 4. run_method_*                       8 CCC methods on the same normalised input
         │
+        │  4b. baseline (no simulated signal), per strategy × dataset × radius:
+        │      run_baseline_prepare           original counts + metadata  (processing_baseline.R)
+        │      run_baseline_normalization     scater::logNormCounts
+        │      run_method_*_baseline          same 8 methods  → <dataset>/<method>/baseline/
+        │
         ▼
-5. run_metric_f1score_rankingLRgenes_all   → output/<strategy>/final_scores.RDS
+5. run_metric_f1score_rankingLRgenes_all   signal runs vs. baseline → output/<strategy>/final_scores.RDS
         │
         ▼
 6. visualize_results                  → output/<strategy>/ figures
@@ -148,6 +174,7 @@ CCC_benchmark_ST/
 │   ├── processing_dataset_spatialScattering.R
 │   ├── processing_dataset_spatialColocalization.R
 │   ├── processing_semisimulation_nbsampling.R
+│   ├── processing_baseline.R
 │   ├── processing_normalization.R
 │   ├── general_spatial_QCpipeline_R_function.R
 │   ├── helper_functions.R
@@ -175,7 +202,7 @@ CCC_benchmark_ST/
 
 ### Requirements
 
-- [Snakemake](https://snakemake.readthedocs.io/) with a SLURM profile (`--profile slurm`)
+- [Snakemake](https://snakemake.readthedocs.io/) ≥ 6 (the baseline rules use `use rule ... with:`) with a SLURM profile (`--profile slurm`)
 - [Apptainer](https://apptainer.org/) or [SingularityCE](https://sylabs.io/singularity/) ≥ 4.0
 - A SLURM cluster (the pipeline can also run locally if you drop `--profile slurm`, but the full grid is large)
 
@@ -237,10 +264,13 @@ snakemake --use-singularity --profile slurm output/spatialScattering/visualize_r
 ```
 output/<strategy>/
 ├── <dataset>_semiSimulation_NB/     # inflated + normalised counts, simulated metadata, ground truth
+├── <dataset>_baseline/              # original + normalised counts and metadata, no simulated signal
 ├── <dataset>/<method>/              # significant_interactions_*.tsv and neighbourhood plots
-├── final_scores.RDS                 # precision / recall / F1 / rank per combination
+├── <dataset>/<method>/baseline/     # significant_interactions_baseline_l_<radius>.tsv (baseline runs)
+├── final_scores.RDS                 # precision / recall / F1 / rank and baseline-comparison counts per combination
 └── …                                # summary figures from visualization.R
 data/processed/<strategy>/<dataset>/ # processed counts, edgeR estimates, QC and distance plots
+data/cpdbv5_extrafiles/<strategy>/<dataset>/baseline/  # CellPhoneDB metadata for the baseline
 ```
 
 ---

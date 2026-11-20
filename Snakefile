@@ -283,6 +283,116 @@ rule run_method_seurat_wilcoxon:
         "scripts/method_seurat_wilcoxon.R"
 
 ###############################################################################
+# STEP 4b: Baseline runs (no signal added)
+#
+# Every method is also run on the original processed data, without semi-
+# simulation. Methods infer interactions from the fixed Celltype labels
+# (Sender/Receiver), so the baseline does not depend on PCE_Sender,
+# PCE_Receiver or indexLR_toSample - only on strategy, dataset and (for the
+# spatial methods) radius_param_index. In the metric step, each semi-simulated
+# run is compared with the baseline of the same strategy/dataset/method/radius
+# to separate interactions caused by the simulation from those already present.
+#
+# The method rules are reused with `use rule ... with:` (Snakemake >= 6), so
+# the method scripts and containers are identical to the signal runs. Baseline
+# files live in separate folders ({dataset}_baseline/ and {method}/baseline/)
+# so they are not picked up by the list.files() calls in visualization.R.
+###############################################################################
+
+rule run_baseline_prepare:
+    threads: 1
+    resources:
+        mem_mb=15000
+    input:
+        processed_counts="data/processed/{strategy}/{dataset}/processed_counts_{dataset}.tsv",
+        cellmetadata="data/processed/{strategy}/{dataset}/cellmetadata_{dataset}.json"
+    output:
+        baseline_counts="output/{strategy}/{dataset}_baseline/baseline_counts.tsv",
+        baseline_cellmetadata="output/{strategy}/{dataset}_baseline/baseline_cellmetadata.json",
+        metadata_cpdbv5="data/cpdbv5_extrafiles/{strategy}/{dataset}/baseline/metadata_cpdbv5_baseline.tsv"
+    container:
+        "sing_container/liana_edgeR.sif"
+    script:
+        "scripts/processing_baseline.R"
+
+use rule run_normalization as run_baseline_normalization with:
+    input:
+        inflated_counts="output/{strategy}/{dataset}_baseline/baseline_counts.tsv"
+    output:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv"
+
+use rule run_method_cellphonedbv5 as run_method_cellphonedbv5_baseline with:
+    input:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv",
+        microenvironment="data/cpdbv5_extrafiles/microenvironment.tsv",
+        cellmetadata_post_simulation="data/cpdbv5_extrafiles/{strategy}/{dataset}/baseline/metadata_cpdbv5_baseline.tsv",
+        cpdb_database="data/cpdbv5_extrafiles/cellphonedb_08_25_2025_151500.zip"
+    output:
+        significant_interactions="output/{strategy}/{dataset}/cellphonedbv5/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv"
+
+use rule run_method_lianaP_morans as run_method_lianaP_morans_baseline with:
+    input:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv",
+        cellmetadata_post_simulation="output/{strategy}/{dataset}_baseline/baseline_cellmetadata.json"
+    output:
+        significant_interactions="output/{strategy}/{dataset}/lianaP_morans/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv",
+        plot_neighbors="output/{strategy}/{dataset}/lianaP_morans/baseline/plot_selected_neighbors_lianaP_morans_baseline_l_{radius_param_index}.png"
+    params:
+        PCE_Receiver = "0",   # no PCE/indexLR in the baseline; only used by an optional diagnostic in the script
+        PCE_Sender = "0",
+        indexLR = "0",
+        radius_index = "{radius_param_index}",
+        dataset = "{dataset}",
+        LR_database=config["LR_database"]
+
+use rule run_method_spatialdm as run_method_spatialdm_baseline with:
+    input:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv",
+        cellmetadata_post_simulation="output/{strategy}/{dataset}_baseline/baseline_cellmetadata.json"
+    output:
+        significant_interactions="output/{strategy}/{dataset}/spatialdm/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv",
+        plot_neighbors="output/{strategy}/{dataset}/spatialdm/baseline/plot_selected_neighbors_spatialdm_baseline_l_{radius_param_index}.png"
+
+use rule run_method_mistyR as run_method_mistyR_baseline with:
+    input:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv",
+        cellmetadata_post_simulation="output/{strategy}/{dataset}_baseline/baseline_cellmetadata.json"
+    output:
+        significant_interactions="output/{strategy}/{dataset}/mistyR/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv",
+        plot_neighbors="output/{strategy}/{dataset}/mistyR/baseline/plot_selected_neighbors_mistyR_baseline_l_{radius_param_index}.png"
+
+use rule run_method_NICHES as run_method_NICHES_baseline with:
+    input:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv",
+        cellmetadata_post_simulation="output/{strategy}/{dataset}_baseline/baseline_cellmetadata.json"
+    output:
+        significant_interactions="output/{strategy}/{dataset}/NICHES/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv",
+        plot_neighbors="output/{strategy}/{dataset}/NICHES/baseline/plot_selected_neighbors_NICHES_baseline_l_{radius_param_index}.png"
+
+use rule run_method_cellchat as run_method_cellchat_baseline with:
+    input:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv",
+        cellmetadata_post_simulation="output/{strategy}/{dataset}_baseline/baseline_cellmetadata.json"
+    output:
+        significant_interactions="output/{strategy}/{dataset}/cellchat/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv",
+        plot_neighbors="output/{strategy}/{dataset}/cellchat/baseline/plot_selected_neighbors_cellchat_baseline_l_{radius_param_index}.png"
+
+use rule run_method_stlearn as run_method_stlearn_baseline with:
+    input:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv",
+        cellmetadata_post_simulation="output/{strategy}/{dataset}_baseline/baseline_cellmetadata.json"
+    output:
+        significant_interactions="output/{strategy}/{dataset}/stlearn/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv",
+        plot_neighbors="output/{strategy}/{dataset}/stlearn/baseline/plot_selected_neighbors_stlearn_baseline_l_{radius_param_index}.png"
+
+use rule run_method_seurat_wilcoxon as run_method_seurat_wilcoxon_baseline with:
+    input:
+        normalized_counts="output/{strategy}/{dataset}_baseline/baseline_normalized_counts.tsv",
+        cellmetadata_post_simulation="output/{strategy}/{dataset}_baseline/baseline_cellmetadata.json"
+    output:
+        significant_interactions="output/{strategy}/{dataset}/seurat_wilcoxon/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv"
+
+###############################################################################
 # STEP 5: Metrics
 #
 # f1score: pulls in every (dataset, method, PCE_Sender, PCE_Receiver,
@@ -305,6 +415,13 @@ rule run_metric_f1score_rankingLRgenes_all:
             method=config["methods"],
             radius_param_index=config["radius_param_index"],
             indexLR_toSample=config["indexLR_toSample"]
+        ),
+        baseline_interactions=lambda wildcards: expand(
+            "output/{strategy}/{dataset}/{method}/baseline/significant_interactions_baseline_l_{radius_param_index}.tsv",
+            strategy=wildcards.strategy,
+            dataset=config["datasets"],
+            method=config["methods"],
+            radius_param_index=config["radius_param_index"]
         )
     output:
         final_scores="output/{strategy}/final_scores.RDS"

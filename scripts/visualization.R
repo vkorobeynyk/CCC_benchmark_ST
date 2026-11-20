@@ -390,6 +390,83 @@ statistics_results_lst_recallprecision = metric_results %>% lapply(., function(d
   })
 })
 
+# ------------------------------------------------------------------
+# Baseline comparison plots (signal runs vs. runs without added signal)
+# A) Fate of interactions significant without signal: retained or lost after
+#    injection, and if lost, whether they involve the simulated genes.
+# B) Composition of non-simulated significant interactions after injection:
+#    pre-existing, related to the simulated pair, or false positives.
+# Values are averaged across all PCE_Sender x PCE_Receiver x indexLR runs per
+# method, separately for each radius scenario.
+# (dplyr:: prefixes are needed because plyr is loaded after dplyr)
+# ------------------------------------------------------------------
+build_baseline_plots = function(metric_results_dataset, dataset_name) {
+
+  df = do.call(rbind, lapply(metric_results_dataset, function(m) do.call(rbind, m))) %>%
+    dplyr::mutate(scenario = factor(scenario_labels[as.character(radius_param_index)], levels = scenario_labels))
+
+  # ---- A) Fate of baseline-significant interactions ----
+  fate_df = df %>%
+    dplyr::filter(n_baseline_significant > 0) %>%
+    dplyr::mutate(retained_nonsim = n_pre_existing,
+                  retained_sim    = n_baseline_significant - n_pre_existing - n_lost) %>%
+    dplyr::group_by(method, scenario) %>%
+    dplyr::summarise(dplyr::across(c(retained_nonsim, retained_sim, n_lost_simulated, n_lost_related,
+                                     n_lost_unrelated, n_baseline_significant), mean),
+                     .groups = "drop") %>%
+    pivot_longer(c(retained_nonsim, retained_sim, n_lost_simulated, n_lost_related, n_lost_unrelated),
+                 names_to = "fate", values_to = "n") %>%
+    dplyr::mutate(frac = n / n_baseline_significant,
+                  fate = factor(fate,
+                                levels = c("retained_nonsim", "retained_sim", "n_lost_simulated",
+                                           "n_lost_related", "n_lost_unrelated"),
+                                labels = c("Retained (non-simulated)", "Retained (simulated)",
+                                           "Lost: simulated pair", "Lost: shares gene with simulated pair",
+                                           "Lost: unrelated")))
+
+  fate_cols = c("Retained (non-simulated)"              = "#0072B2",
+                "Retained (simulated)"                  = "#56B4E9",
+                "Lost: simulated pair"                  = "#E69F00",
+                "Lost: shares gene with simulated pair" = "#F0E442",
+                "Lost: unrelated"                       = "#D55E00")
+
+  p_fate = ggplot(fate_df, aes(x = method, y = frac, fill = fate)) +
+    geom_col(width = 0.7) +
+    facet_wrap(~ scenario, nrow = 1) +
+    scale_fill_manual(values = fate_cols, drop = FALSE) +
+    scale_y_continuous(labels = scales::percent) +
+    labs(title = paste0("Fate of interactions significant without signal - ", dataset_name),
+         x = NULL, y = "Fraction of baseline-significant interactions", fill = NULL) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+  # ---- B) Composition of non-simulated significant interactions after injection ----
+  comp_df = df %>%
+    dplyr::group_by(method, scenario) %>%
+    dplyr::summarise(dplyr::across(c(n_pre_existing, n_related, FP), mean), .groups = "drop") %>%
+    pivot_longer(c(n_pre_existing, n_related, FP), names_to = "class", values_to = "n") %>%
+    dplyr::mutate(class = factor(class,
+                                 levels = c("n_pre_existing", "n_related", "FP"),
+                                 labels = c("Pre-existing (also significant without signal)",
+                                            "New, shares gene with simulated pair",
+                                            "New, unrelated (false positive)")))
+
+  comp_cols = c("Pre-existing (also significant without signal)" = "#0072B2",
+                "New, shares gene with simulated pair"           = "#F0E442",
+                "New, unrelated (false positive)"                = "#D55E00")
+
+  p_comp = ggplot(comp_df, aes(x = method, y = n, fill = class)) +
+    geom_col(width = 0.7) +
+    facet_wrap(~ scenario, nrow = 1) +
+    scale_fill_manual(values = comp_cols, drop = FALSE) +
+    labs(title = paste0("Non-simulated significant interactions after signal injection - ", dataset_name),
+         x = NULL, y = "Mean number of interactions per run", fill = NULL) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+  list(fate = p_fate, composition = p_comp)
+}
+
 master_lst_precision_recall = list()
 simulated_interactions_lst = list()
 
@@ -806,7 +883,10 @@ for (dataset in datasets)
   
   indexLR_plot1 = make_indexLR_ridge_plot(final_df, "precision", "Precision")
   indexLR_plot2 = make_indexLR_ridge_plot(final_df, "recall", "Recall")
-  
+
+  # comparison with baseline runs (no signal added)
+  baseline_plots = build_baseline_plots(metric_results[[dataset]], dataset)
+
   # ------------------------------------------------------------------
   # save the precision/recall plots for this dataset
   # ------------------------------------------------------------------
@@ -822,6 +902,8 @@ for (dataset in datasets)
   upset2 %>% print
   indexLR_plot1 %>% print
   indexLR_plot2 %>% print
+  baseline_plots$fate        %>% print
+  baseline_plots$composition %>% print
   dev.off()
   
   pdf(file.path(path_results_dir, paste0(dataset, "_recall_precision_plots2.pdf")), width = 20, height = 7)

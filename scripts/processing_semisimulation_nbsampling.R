@@ -49,6 +49,11 @@ PCE_Sender = snakemake@wildcards[["PCE_Sender"]] %>% as.double
 PCE_Receiver = snakemake@wildcards[["PCE_Receiver"]] %>% as.double
 LR_database_path = snakemake@params[["LR_database"]]
 
+# Fixed seed per parameter combination, so that the choice of signal-added
+# cells and the NB sampling in semi_simulate() are reproducible across reruns.
+# Unique for PCE_Receiver < 100 and indexLR_toSample < 100.
+set.seed(as.integer(PCE_Sender * 10000 + PCE_Receiver * 100 + indexLR_toSample))
+
 # ==============================================================================
 # STEP 1: load data
 # ==============================================================================
