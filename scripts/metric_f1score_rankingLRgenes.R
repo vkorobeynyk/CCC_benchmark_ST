@@ -47,6 +47,16 @@ radius_param_index = config$radius_param_index %>% unlist %>% as.double
 PCE_Sender = config$semiSimulation$PCE_Sender %>% unlist %>% as.double
 PCE_Receiver = config$semiSimulation$PCE_Receiver %>% unlist %>% as.double
 
+# Order-independent ID of an interaction: its genes sorted alphabetically.
+# Methods do not all write complex subunits in the same order as
+# LR_database.tsv (e.g. WNT1_LRP5_FZD1 vs WNT1_FZD1_LRP5): spatialDM and
+# CellChat use their own database order, and CellPhoneDB writes complexes as
+# the gene list of its deconvoluted output. Comparing gene sets makes the
+# simulated pair, the baseline and every method output comparable.
+gene_set_key = function(x) {
+  vapply(str_split(toupper(as.character(x)), "_"), function(g) paste(sort(g), collapse = "_"), character(1))
+}
+
 # ==============================================================================
 # STEP 1: loop over every dataset / indexLR / method / parameter combination
 # and score each one against the known simulated ground truth
@@ -65,7 +75,8 @@ for (dataset in datasets)
     
     # genes (ligand and receptor subunits) of the simulated pair; non-simulated
     # pairs sharing any of them are "related" and not counted as false positives
-    sim_genes = simulated_interactions %>% str_split("_") %>% unlist %>% unique
+    sim_genes = simulated_interactions %>% str_split("_") %>% unlist %>% toupper %>% unique
+    sim_key = simulated_interactions %>% str_split("_") %>% unlist %>% str_c(., collapse = "_") %>% gene_set_key
 
     for (method in methods)
     {
@@ -78,6 +89,7 @@ for (dataset in datasets)
                    header = T, sep = "\t") %>%
           filter(as.logical(significant)) %>%
           pull(ligand_receptor) %>%
+          gene_set_key %>%
           unique
       }) %>% setNames(as.character(radius_param_index))
       
@@ -101,18 +113,18 @@ for (dataset in datasets)
         # ------------------------------------------------------------------
         # rank of the simulated LR pair among this method's output
         # ------------------------------------------------------------------
-        l_r = simulated_interactions %>% str_split("_") %>% unlist %>% str_c(., collapse = "_")
-        
-        l_r_all = grepl(l_r, all_interactions$ligand_receptor)
+        # the simulated pair is matched by gene set (see gene_set_key), so the
+        # order in which a method writes complex subunits does not matter
+        l_r_all = gene_set_key(all_interactions$ligand_receptor) == sim_key
         if (nrow(significant_interactions) != 0)
         {
-          l_r_significant = any(grepl(l_r, significant_interactions$ligand_receptor))
+          l_r_significant = any(gene_set_key(significant_interactions$ligand_receptor) == sim_key)
         } else {
           l_r_significant = FALSE
         }
-        
+
         if (any(l_r_all)) {
-          n = which(l_r_all) # some methods detect the L-R pair without detecting a specific subunit; in that case, take the best rank
+          n = which(l_r_all) # if the pair appears more than once in the output, take the best rank
           
           if (method == "cellchat" | method == "mistyR") {
             # methods where a higher statistic is more relevant -> rank in descending order
@@ -149,23 +161,23 @@ for (dataset in datasets)
         #                  wipes the native expression of the simulated genes in
         #                  Sender/Receiver cells, so simulated/related losses are
         #                  expected; unrelated losses would indicate a global effect.
-        # The simulated pair is matched with grepl(l_r, ...) as for TP above.
+        # All interactions are compared by gene set (gene_set_key), as for TP above.
         # ------------------------------------------------------------------
         n_additional = FP   # previous FP definition (all non-simulated significant interactions)
 
-        baseline_sig = baseline_sig_lst[[as.character(x[["radius_param_index"]])]]
+        baseline_sig = baseline_sig_lst[[as.character(x[["radius_param_index"]])]]   # already gene-set keys
         is_related_fun = function(lr) vapply(str_split(lr, "_"), function(g) any(g %in% sim_genes), logical(1))
 
-        significant_lr = unique(significant_interactions$ligand_receptor)
-        non_sim        = significant_lr[!grepl(l_r, significant_lr)]
+        significant_lr = unique(gene_set_key(significant_interactions$ligand_receptor))
+        non_sim        = significant_lr[significant_lr != sim_key]
         pre_existing   = intersect(non_sim, baseline_sig)
         new_nonsim     = setdiff(non_sim, baseline_sig)
         related        = new_nonsim[is_related_fun(new_nonsim)]
         fp_diff        = new_nonsim[!is_related_fun(new_nonsim)]
 
         lost           = setdiff(baseline_sig, significant_lr)
-        lost_simulated = lost[grepl(l_r, lost)]
-        lost_nonsim    = lost[!grepl(l_r, lost)]
+        lost_simulated = lost[lost == sim_key]
+        lost_nonsim    = lost[lost != sim_key]
         lost_related   = lost_nonsim[is_related_fun(lost_nonsim)]
         lost_unrelated = lost_nonsim[!is_related_fun(lost_nonsim)]
 

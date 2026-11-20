@@ -135,6 +135,8 @@ rule run_method_cellphonedbv5:
         cpdb_database="data/cpdbv5_extrafiles/cellphonedb_08_25_2025_151500.zip",
     output:
         significant_interactions="output/{strategy}/{dataset}/cellphonedbv5/significant_interactions_PCE_Sender_{PCE_Sender}_PCE_Receiver_{PCE_Receiver}_l_{radius_param_index}_indexLR_{indexLR_toSample}.tsv"
+    params:
+        LR_database=config["LR_database"]   # output is restricted to these pairs (CellPhoneDB runs on its own database)
     container:
         "sing_container/cellphonedbv5.sif"
     script:

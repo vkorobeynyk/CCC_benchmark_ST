@@ -20,6 +20,9 @@ microenvironment_path = snakemake.input["microenvironment"]
 cellmetadata_path = snakemake.input["cellmetadata_post_simulation"]
 cpdb_database_path = snakemake.input["cpdb_database"]
 
+# params
+LR_database_path = snakemake.params["LR_database"]
+
 # output files
 significant_interactions_path = snakemake.output["significant_interactions"]
 
@@ -84,6 +87,21 @@ LRdata_df = pd.DataFrame({"ligand_receptor": cpdb_results["pvalues"]["interactin
 LRdata_df["significant"] = LRdata_df["pval"] < 0.05
 LRdata_df = LRdata_df.rename({"pval": "statistics"}, axis=1)
 LRdata_df = LRdata_df.sort_values("statistics")  # sort importance column in ascending order
+
+# Restrict the output to the LR pairs in LR_database.tsv (the set shared by all
+# methods). CellPhoneDB runs on its own database, so without this it would report
+# pairs the other methods cannot test. Each interaction's p-value comes from its
+# own permutation test (no correction across interactions), so filtering here is
+# equivalent to restricting the database. Matching is by gene set, because
+# CellPhoneDB names complexes by their deconvoluted gene list, which does not
+# follow the subunit order of LR_database.tsv.
+lr_db = pd.read_csv(LR_database_path, sep=" ")
+
+def gene_set_key(x):
+    return "_".join(sorted(str(x).upper().split("_")))
+
+db_keys = set(lr_db["ligand_receptor"].map(gene_set_key))
+LRdata_df = LRdata_df[LRdata_df["ligand_receptor"].map(gene_set_key).isin(db_keys)]
 
 # metadata columns (this method doesn't use a spatial radius, so these are
 # fixed placeholders rather than computed values, unlike the spatial methods)
