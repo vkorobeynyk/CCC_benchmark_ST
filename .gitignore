@@ -2,6 +2,7 @@
 file.png
 Rplots.pdf
 data/*
+!data/LR_database_beforeSpatialDMsubset.tsv
 !data/LR_database.tsv
 !data/InfoAbout_LR_database.txt
 !data/LR_database_entirecellhponedb.tsv

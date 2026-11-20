@@ -235,9 +235,9 @@ data/
     └── cellphonedb_<version>.zip            # CellPhoneDB v5 database
 ```
 
-**LR database.** `data/LR_database.tsv` comes from CellPhoneDB in LIANA format. Complex subunits are joined with `_` (e.g. `L_R1_R2`). Self-interactions and genes with a dash in their name were removed, and only pairs also in `CellChatDB.human` were kept. The rows were then shuffled, because the simulation picks LR pairs by row index. The full curation code is in `data/InfoAbout_LR_database.txt`.
+**LR database.** `data/LR_database.tsv` comes from CellPhoneDB in LIANA format. Complex subunits are joined with `_` (e.g. `L_R1_R2`). Self-interactions and genes with a dash in their name were removed, and only pairs also in `CellChatDB.human` were kept. The rows were then shuffled, because the simulation picks LR pairs by row index. Finally, the database was restricted to the 665 pairs also present in SpatialDM's own interaction list (`data/SPATIALDM_REQ_interaction_input_CellChatDB.csv`, matched by gene set, ignoring subunit order). SpatialDM does not read `LR_database.tsv`, so pairs missing from its list could never be detected by it; with the subset, every method tests the same set of interactions. The previous version (1,038 pairs) is kept as `data/LR_database_beforeSpatialDMsubset.tsv`. The full curation code is in `data/InfoAbout_LR_database.txt`.
 
-> Visium HD has only a few multi-subunit LR pairs, so keep `indexLR_toSample` below 16 for that dataset.
+> The subset has 305 pairs with a single-subunit receptor and 360 with two subunits, before filtering for expression in each dataset. Visium HD has only a few expressed multi-subunit LR pairs, so check that enough two-subunit pairs remain for the chosen `indexLR_toSample` (the second half of its values selects two-subunit pairs).
 
 ### 3. Configure
 

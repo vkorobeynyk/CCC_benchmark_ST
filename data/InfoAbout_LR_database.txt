@@ -12,6 +12,7 @@ To ensure method compatibility and technical stability, the following steps were
 *   **Technical Cleaning:** Interactions containing dashes (e.g., `HLA-E`) were removed (8 cases total) to prevent errors in downstream tools.
 *   **CellChat Compatibility:** The database was subsetted to include only interactions present in `CellChatDB.human`.
 *   **Randomization:** Rows were reshuffled because the simulation framework selects LR pairs sequentially by index.
+*   **SpatialDM Compatibility (spatial benchmark):** SpatialDM does not use `LR_database.tsv` but its own, older CellChatDB interaction list (`SPATIALDM_REQ_interaction_input_CellChatDB.csv`), which contains only 665 of the 1,038 pairs above (e.g. `TENM4_ADGRL2` is missing). Pairs absent from that list can never be detected by SpatialDM. To give every method the same set of testable interactions, `LR_database.tsv` was subsetted to the pairs also present in the SpatialDM list. Pairs were matched by their set of genes, ignoring the order of complex subunits (e.g. `WNT1_LRP5_FZD1` in `LR_database.tsv` is `WNT1_FZD1_LRP5` in the SpatialDM list). All 665 SpatialDM pairs are present in the previous `LR_database.tsv`, so the subset contains exactly the SpatialDM pairs (305 with a single-subunit receptor, 360 with two subunits), with `LR_database.tsv` naming and row order kept. The previous version is kept as `LR_database_beforeSpatialDMsubset.tsv`.
 
 ## Subunit Nomenclature
 Complexes are represented using the `L_R1_R2_R3` format (e.g., a receptor with three subunits is `R1_R2_R3`). In the semi-simulation, signal is added to every subunit of the complex.
@@ -56,3 +57,31 @@ LR_database$ligand = fix_gene_order(LR_database$ligand)
 LR_database$ligand_receptor = str_c(LR_database$ligand, "_", LR_database$receptor)
 
 write.table(LR_database, "data/LR_database.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+
+# NOTE: the LR_database.tsv used by the pipeline is space-separated, quoted and
+# has row names (R's write.table defaults), i.e. it was written with
+# write.table(LR_database, "data/LR_database.tsv"). All method scripts read it
+# in that format.
+
+# ------------------------------------------------------------------------------
+# Subset to the pairs present in SpatialDM's interaction list (spatial benchmark)
+# ------------------------------------------------------------------------------
+# SpatialDM uses its own CellChatDB list instead of LR_database.tsv, so only
+# pairs present in both can be detected by every method. Matching is done on the
+# set of genes of each pair, so the order of complex subunits does not matter.
+
+LR_database = read.table("data/LR_database.tsv", header = TRUE)
+write.table(LR_database, "data/LR_database_beforeSpatialDMsubset.tsv")   # keep previous version
+
+spatialdm_db = read.csv("data/SPATIALDM_REQ_interaction_input_CellChatDB.csv", row.names = 1)
+
+gene_set_key = function(x) {
+  sapply(strsplit(toupper(x), "_"), function(g) paste(sort(g), collapse = "_"))
+}
+
+LR_database = LR_database[gene_set_key(LR_database$ligand_receptor) %in% gene_set_key(spatialdm_db$interaction_name), ]
+
+nrow(LR_database)                                    # 665 (all SpatialDM pairs)
+table(str_count(LR_database$ligand_receptor, "_"))   # 1: 305 single-subunit, 2: 360 two-subunit receptors
+
+write.table(LR_database, "data/LR_database.tsv")
