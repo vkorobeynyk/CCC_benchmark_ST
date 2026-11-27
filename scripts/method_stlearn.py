@@ -98,6 +98,7 @@ LR_expanded = LR_expanded.drop_duplicates(subset="expanded").reset_index(drop=Tr
 
 # Gene-level permutation test: identifies which LR pairs are spatially
 # co-expressed more than expected by chance.
+np.random.seed(1)
 st.tl.cci.run(adata, LR_expanded["expanded"].to_numpy(),
               min_spots=0,
               distance=radius,
@@ -116,7 +117,7 @@ st.tl.cci.run_cci(adata, 'Celltype',
 
                    cell_prop_cutoff=0,
                    sig_spots=True,
-                   n_perms=25,
+                   n_perms=50,
                    n_cpus=args.n_cpus
                    )
 
